@@ -2,11 +2,11 @@
 
 Let AI agents read and edit your [Hyperclay](https://hyperclay.com) documents, from the command line or as an MCP server for Claude Code, Claude Desktop and Cursor.
 
-> **Early release.** Agent keys are not yet available on hyperclay.com, so this version cannot connect to anything yet. Support for the HTML Clay and Hyperclay Local desktop apps comes in a later version.
+> Works with hyperclay.com. Support for the HTML Clay and Hyperclay Local desktop apps comes in a later version.
 
 ## How it works
 
-You make an **agent key** in the Hyperclay dashboard: a named key that can be limited to one team or folder, and to reading, changing content, or full editing. You can revoke it at any time. The agent acts as you, with no more access than you have, and every change it makes is kept in the document's version history as "Recorded by you through <key name>", so any change can be restored.
+You make an **agent key** in the Hyperclay dashboard (account menu, **Agent keys…**; see [the docs](https://hyperclay.com/docs/agents/)): a named key that can be limited to one team or folder, and to reading, changing content, or full editing. You can revoke it at any time. The agent acts as you, with no more access than you have, and every change it makes is kept in the document's version history as "Recorded by you through <key name>", so any change can be restored.
 
 Every write is based on the version the agent read. If the document changed in the meantime, the write is refused and the agent is told to read it again. Nothing is merged or overwritten silently.
 
