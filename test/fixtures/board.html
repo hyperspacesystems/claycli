@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Board &amp; cards — Café</title>
+  <style>
+    .column { display: flex; gap: 1rem; }
+    .card { padding: 1rem; border: 1px solid #ccc; }
+  </style>
+  <script class="rules" type="application/json" data-rules-name="api">{"columns":[{"name":"todo"},{"name":"doing"},{"name":"done"}],"title":"Board & Café"}</script>
+  <script class="boot">window.board = { name: "Café &amp; Co", count: 9 };</script>
+</head>
+<body>
+  <main id="board">
+    <h1>My board — Café</h1>
+    <section class="column" data-name="todo">
+      <article class="card"><h2>First &amp; best</h2><p>Plan the day.</p></article>
+      <article class="card"><h2>Second</h2><p>Write notes.</p></article>
+      <article class="card"><h2>Third</h2><p>Ship it.</p></article>
+    </section>
+    <section class="column" data-name="doing">
+      <article class="card"><h2>Doing one</h2><p>Halfway there.</p></article>
+      <article class="card"><h2>Doing two</h2><p>Almost done.</p></article>
+      <article class="card"><h2>Doing three</h2><p>Soon enough.</p></article>
+    </section>
+    <section class="column" data-name="done">
+      <article class="card"><h2>Done one</h2><p>Finished &amp; filed.</p></article>
+      <article class="card"><h2>Done two</h2><p>Complete.</p></article>
+      <article class="card"><h2>Done three</h2><p>Archived.</p></article>
+    </section>
+    <table>
+      <tr><th>Column</th><th>Cards</th></tr>
+      <tr><td>todo</td><td>3 &amp; 3</td></tr>
+      <tr><td>done</td><td>3</td></tr>
+    </table>
+  </main>
+</body>
+</html>

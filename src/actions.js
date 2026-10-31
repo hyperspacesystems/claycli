@@ -1,0 +1,288 @@
+import { ClayError } from './errors.js';
+import { applyEdits } from './html/edit.js';
+import { find } from './html/find.js';
+import { outline } from './html/outline.js';
+import { range as sliceRange, select as selectMatches } from './html/select.js';
+import { createSession } from './session.js';
+
+const KEY_PATTERN = /hcak_[0-9a-f]{64}/;
+const TOO_LARGE_HINT =
+  'Use outline_document to see its structure, find_in_document to locate text, or read_document with select or range to read part of it.';
+
+const CUT_HINT =
+  'The answer was cut to stay within maxChars. Read the rest with range, starting at the end offset shown.';
+
+const WHOLE_READ_FIRST_HINT =
+  'Read the whole document with read_document first; save_document replaces all of it.';
+
+function readFirstHint(explicitEtag) {
+  return explicitEtag
+    ? 'Pass --if-match with the etag from a read.'
+    : 'Read the document first (read_document, outline_document, find_in_document or read_data), then write.';
+}
+
+function shapeRead({ ref, host, etag, html, maxChars, input }) {
+  if (input.select !== undefined && input.select !== null) {
+    if (input.range !== undefined && input.range !== null) {
+      throw new ClayError('invalid-read', 'Pass either `select` or `range`, not both.', {
+        hint: 'Use `select` for elements by CSS selector, or `range` for a start and length.',
+      });
+    }
+    const { count, matches } = selectMatches(html, input.select, { maxChars });
+    const answer = { ref, host, etag, size: html.length, count, matches };
+    if (matches.some((match) => match.truncated)) answer.hint = CUT_HINT;
+    return answer;
+  }
+  if (input.range !== undefined && input.range !== null) {
+    const start = input.range.start;
+    const length = input.range.length;
+    const { start: from, end, html: slice, truncated } = sliceRange(html, start, length, { maxChars });
+    const answer = { ref, host, etag, size: html.length, start: from, end, html: slice };
+    if (truncated) {
+      answer.truncated = true;
+      answer.hint = CUT_HINT;
+    }
+    return answer;
+  }
+  if (html.length <= maxChars) {
+    return { ref, host, etag, size: html.length, html };
+  }
+  return {
+    ref,
+    host,
+    etag,
+    size: html.length,
+    tooLarge: true,
+    outline: outline(html, { depth: 3 }).outline,
+    hint: TOO_LARGE_HINT,
+  };
+}
+
+export function createActions({ adapters, resolve, session = createSession(), readOnly = false, explicitEtag = false }) {
+  function refuseReadOnly() {
+    if (readOnly) throw new ClayError('read-only-mode', 'This server was started read-only.');
+  }
+
+  async function targetFor(input) {
+    const target = await resolve(input.document, { host: input.host });
+    const host = target.host;
+    const adapter = adapters[host];
+    if (!adapter) {
+      throw new ClayError('host-unavailable', `No adapter is available for ${host}.`, {
+        hint: 'This build talks to hyperclay.com; other hosts are not connected yet.',
+      });
+    }
+    const { id, ref } = await adapter.locate(target);
+    return { host, adapter, id, ref };
+  }
+
+  async function load(input) {
+    const { host, adapter, id, ref } = await targetFor(input);
+    const stored = session.latest(ref);
+    const ifNoneMatch = stored && stored.html !== undefined ? stored.etag : undefined;
+    const result = await adapter.read(id, { ifNoneMatch });
+    if (result.notModified) {
+      return { ref, host, id, etag: stored.etag, html: stored.html, size: stored.html.length };
+    }
+    session.remember(ref, { etag: result.etag, html: result.html });
+    return {
+      ref,
+      host,
+      id,
+      etag: result.etag,
+      html: result.html,
+      size: result.size ?? result.html.length,
+    };
+  }
+
+  function etagFor(input, ref, { whole = false } = {}) {
+    if (input.etag) return input.etag;
+    if (explicitEtag) {
+      throw new ClayError('read-first', 'This write needs the etag from a read.', {
+        hint: readFirstHint(true),
+      });
+    }
+    const known = whole ? session.wholeEtag(ref) : session.seenEtag(ref);
+    if (!known) {
+      throw new ClayError('read-first', 'This write needs the etag from a read.', {
+        hint: whole ? WHOLE_READ_FIRST_HINT : readFirstHint(false),
+      });
+    }
+    return known;
+  }
+
+  function afterWrite(ref, etag) {
+    session.remember(ref, { etag });
+    session.markSeen(ref, etag);
+  }
+
+  function refuseSecret(html) {
+    if (typeof html === 'string' && KEY_PATTERN.test(html)) {
+      throw new ClayError('secret-in-content', 'The document would contain an agent key. Remove it before saving.');
+    }
+  }
+
+  return {
+    list_documents(input = {}) {
+      const host = input.host ?? 'hyperclay';
+      const adapter = adapters[host];
+      if (!adapter) {
+        throw new ClayError('host-unavailable', `No adapter is available for ${host}.`, {
+          hint: 'This build talks to hyperclay.com; other hosts are not connected yet.',
+        });
+      }
+      return adapter.list({ where: input.where, cursor: input.cursor });
+    },
+
+    async read_document(input = {}) {
+      const maxChars = input.maxChars ?? 40000;
+      const loaded = await load(input);
+      const shaped = shapeRead({
+        ref: loaded.ref,
+        host: loaded.host,
+        etag: loaded.etag,
+        html: loaded.html,
+        maxChars,
+        input,
+      });
+      session.markSeen(loaded.ref, loaded.etag);
+      if (!input.select && !input.range && !shaped.tooLarge) {
+        session.markWhole(loaded.ref, loaded.etag);
+      }
+      return shaped;
+    },
+
+    async outline_document(input = {}) {
+      const loaded = await load(input);
+      const result = outline(loaded.html, { depth: input.depth ?? 4, select: input.select ?? null });
+      session.markSeen(loaded.ref, loaded.etag);
+      const answer = {
+        ref: loaded.ref,
+        host: loaded.host,
+        etag: loaded.etag,
+        size: result.size,
+        hasApiRules: result.hasApiRules,
+        dataKeys: result.dataKeys,
+        depth: result.depth,
+        truncated: result.truncated,
+        outline: result.outline,
+      };
+      if (result.truncated) answer.hint = result.hint;
+      return answer;
+    },
+
+    async find_in_document(input = {}) {
+      const loaded = await load(input);
+      const { count, matches } = await find(loaded.html, {
+        text: input.text,
+        regex: input.regex,
+        limit: input.limit ?? 20,
+      });
+      session.markSeen(loaded.ref, loaded.etag);
+      return { ref: loaded.ref, host: loaded.host, etag: loaded.etag, count, matches };
+    },
+
+    async read_data(input = {}) {
+      const { host, adapter, id, ref } = await targetFor(input);
+      const result = await adapter.readData(id);
+      const stored = session.latest(ref);
+      const keep =
+        stored && stored.etag === result.etag && stored.html !== undefined ? { html: stored.html } : {};
+      session.remember(ref, { etag: result.etag, ...keep });
+      session.markSeen(ref, result.etag);
+      return { ref, host, etag: result.etag, data: result.data };
+    },
+
+    async write_data(input = {}) {
+      refuseReadOnly();
+      const { host, adapter, id, ref } = await targetFor(input);
+      refuseSecret(JSON.stringify(input.data));
+      const etag = etagFor(input, ref);
+      const result = await adapter.writeData(id, { data: input.data, etag });
+      afterWrite(ref, result.etag);
+      return { ref, host, etag: result.etag, changed: result.changed, data: result.data ?? input.data };
+    },
+
+    async edit_document(input = {}) {
+      refuseReadOnly();
+      const { host, adapter, id, ref } = await targetFor(input);
+      const etag = etagFor(input, ref);
+      let base = session.htmlFor(ref, etag);
+      if (base === null) {
+        const loaded = await load(input);
+        if (loaded.etag !== etag) {
+          throw new ClayError('conflict', 'The document changed after you read it.', {
+            etag: loaded.etag,
+            hint: 'Read it again and redo the edit.',
+          });
+        }
+        base = loaded.html;
+      }
+      const { html } = applyEdits(base, input.edits);
+      refuseSecret(html);
+      const result = await adapter.save(id, { html, etag });
+      afterWrite(ref, result.etag);
+      if (session.wholeEtag(ref) === etag) session.markWhole(ref, result.etag);
+      else session.clearWhole(ref);
+      return {
+        ref,
+        host,
+        etag: result.etag,
+        changed: result.changed,
+        chars: html.length,
+        undoVersionId: result.undoVersionId,
+      };
+    },
+
+    async save_document(input = {}) {
+      refuseReadOnly();
+      const { host, adapter, id, ref } = await targetFor(input);
+      refuseSecret(input.html);
+      const etag = etagFor(input, ref, { whole: true });
+      const result = await adapter.save(id, { html: input.html, etag });
+      afterWrite(ref, result.etag);
+      session.markWhole(ref, result.etag);
+      return {
+        ref,
+        host,
+        etag: result.etag,
+        changed: result.changed,
+        undoVersionId: result.undoVersionId,
+      };
+    },
+
+    async list_versions(input = {}) {
+      const { host, adapter, id, ref } = await targetFor(input);
+      const result = await adapter.versions(id, { before: input.before });
+      return { ref, host, versions: result.versions, nextBefore: result.nextBefore };
+    },
+
+    async read_version(input = {}) {
+      const { host, adapter, id, ref } = await targetFor(input);
+      const version = await adapter.version(id, input.version);
+      const maxChars = input.maxChars ?? 40000;
+      const shaped = shapeRead({
+        ref,
+        host,
+        etag: version.etag,
+        html: version.html,
+        maxChars,
+        input: { select: input.select, range: input.range },
+      });
+      const { ref: shapedRef, host: shapedHost, etag: shapedEtag, ...rest } = shaped;
+      const result = { ref: shapedRef, host: shapedHost };
+      if (shapedEtag !== undefined) result.etag = shapedEtag;
+      result.version = input.version;
+      return Object.assign(result, rest);
+    },
+
+    async restore_version(input = {}) {
+      refuseReadOnly();
+      const { host, adapter, id, ref } = await targetFor(input);
+      const etag = etagFor(input, ref);
+      const result = await adapter.restore(id, input.version, { etag });
+      afterWrite(ref, result.etag);
+      return { ref, host, etag: result.etag };
+    },
+  };
+}

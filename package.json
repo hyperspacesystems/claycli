@@ -1,0 +1,52 @@
+{
+  "name": "@panphora/clay-agent",
+  "version": "0.1.0",
+  "description": "Let AI agents read and edit malleable HTML documents on hyperclay.com, HTML Clay and Hyperclay Local, from the command line or as an MCP server",
+  "type": "module",
+  "bin": {
+    "clay-agent": "bin/clay-agent.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20.18.1"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "hyperclay",
+    "html-clay",
+    "malleable-html",
+    "ai-agent"
+  ],
+  "author": "David Miranda",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/panphora/clay-agent.git"
+  },
+  "homepage": "https://github.com/panphora/clay-agent",
+  "bugs": {
+    "url": "https://github.com/panphora/clay-agent/issues"
+  },
+  "hyper": {
+    "kind": "cli",
+    "status": "active",
+    "url": "https://github.com/panphora/clay-agent"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "cheerio": "1.2.0",
+    "zod": "4.6.7"
+  }
+}
