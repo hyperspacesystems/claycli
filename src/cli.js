@@ -29,6 +29,7 @@ Usage:
   clay-agent versions <document> [--before <id>]
   clay-agent version <document> <version-id> [--select <css>] [--range <start:length>]
   clay-agent restore <document> <version-id> --if-match <etag>
+  clay-agent subdomain <document> <name>
 
 Document commands take --json, --host <host> and --hyperclay-url <url>.
 Your agent key is only read from stdin or the CLAY_AGENT_KEY environment variable.
@@ -180,6 +181,7 @@ const COMMAND_USAGE = {
   versions: 'Usage: clay-agent versions <document> [--before <id>]',
   version: 'Usage: clay-agent version <document> <version-id> [--select <css>] [--range <start:length>]',
   restore: 'Usage: clay-agent restore <document> <version-id> --if-match <etag>',
+  subdomain: 'Usage: clay-agent subdomain <document> <name>',
   mcp: 'Usage: clay-agent mcp [--read-only] [--hosts <a,b>]',
 };
 
@@ -448,6 +450,17 @@ async function restoreCommand(argv, context) {
   return 0;
 }
 
+async function subdomainCommand(argv, context) {
+  const usage = COMMAND_USAGE.subdomain;
+  const { flags, positionals } = parseCommandArgv(argv, usage);
+  requirePositionals(positionals, 2, usage);
+  const actions = await buildForDocument(context, flags);
+  const input = documentInput(positionals, flags);
+  input.subdomain = positionals[1];
+  printResult(await actions.claim_subdomain(input), flags, context);
+  return 0;
+}
+
 async function mcpCommand(argv, context) {
   await runMcp({
     env: context.env,
@@ -483,6 +496,7 @@ async function dispatch(argv, context) {
   if (command === 'versions') return versionsCommand(rest, context);
   if (command === 'version') return versionCommand(rest, context);
   if (command === 'restore') return restoreCommand(rest, context);
+  if (command === 'subdomain') return subdomainCommand(rest, context);
   context.stderr.write(USAGE);
   return 1;
 }

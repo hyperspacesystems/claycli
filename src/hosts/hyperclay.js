@@ -12,6 +12,10 @@ const HINTS = {
   unauthorized: KEY_HINT,
   'key-revoked': KEY_HINT,
   'key-expired': KEY_HINT,
+  'invalid-subdomain': 'Use letters, numbers and single dashes, and avoid reserved words.',
+  'name-in-use': 'Choose another name.',
+  'subdomain-already-set': 'Change a subdomain in the dashboard.',
+  'subdomain-limit-reached': 'Your subdomain limit grows each month.',
 };
 
 export function hyperclayClient({ base, getKey, fetchImpl = fetch, timeoutMs = 30000 } = {}) {
@@ -48,7 +52,7 @@ export function hyperclayClient({ base, getKey, fetchImpl = fetch, timeoutMs = 3
     return code === 'ECONNREFUSED' || code === 'ENOTFOUND' || code === 'EAI_AGAIN' || code === 'ENETUNREACH';
   }
 
-  async function request(pathname, { method = 'GET', query = null, body, etag, ifNoneMatch } = {}) {
+  async function request(pathname, { method = 'GET', query = null, body, etag, ifNoneMatch, noEtag = false } = {}) {
     const key = getKey ? await getKey() : null;
     if (!key) {
       throw new ClayError('key-missing', 'Not signed in to hyperclay.com.', { hint: KEY_HINT });
@@ -122,7 +126,7 @@ export function hyperclayClient({ base, getKey, fetchImpl = fetch, timeoutMs = 3
           status: response.status,
         });
       }
-      if (write && typeof parsed.etag !== 'string') throw lostOutcome();
+      if (write && !noEtag && typeof parsed.etag !== 'string') throw lostOutcome();
       return parsed;
     }
 
@@ -205,6 +209,12 @@ export function hyperclayClient({ base, getKey, fetchImpl = fetch, timeoutMs = 3
         `/documents/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}/restore`,
         { method: 'POST', etag: match, body: { operationId: randomUUID() } },
       );
+    },
+
+    async claimSubdomain(id, subdomain) {
+      const claimed = await request(`/documents/${encodeURIComponent(id)}/subdomain`, { method: 'POST', body: { subdomain }, noEtag: true });
+      if (typeof claimed?.subdomain !== 'string') throw lostOutcome();
+      return claimed;
     },
   };
 }

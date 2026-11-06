@@ -390,6 +390,61 @@ test('a write answered by an HTML 502 or by a JSON body without an etag is outco
   });
 });
 
+test('claimSubdomain returns a 200 answer with no etag as is and sends no If-Match', async () => {
+  await withServer(async (server) => {
+    server.answer(200, {
+      subdomain: 'my-tool',
+      url: 'https://my-tool.hyperclay.com',
+      changed: true,
+      warnings: [],
+    });
+
+    const result = await client(server).claimSubdomain('doc_1', 'my-tool');
+
+    assert.deepEqual(result, {
+      subdomain: 'my-tool',
+      url: 'https://my-tool.hyperclay.com',
+      changed: true,
+      warnings: [],
+    });
+    const seen = server.state.requests.at(-1);
+    assert.equal(seen.method, 'POST');
+    assert.equal(new URL(seen.url, 'http://localhost').pathname, '/_/agent/v1/documents/doc_1/subdomain');
+    assert.deepEqual(JSON.parse(seen.body), { subdomain: 'my-tool' });
+    assert.equal(seen.headers['if-match'], undefined);
+  });
+});
+
+test('a 200 answer with no etag is still outcome-unknown on writeData and restore', async () => {
+  await withServer(async (server) => {
+    server.answer(200, { changed: true });
+    await assert.rejects(client(server).writeData('doc_1', { data: { visits: 2 }, etag: 'D1' }), (error) => {
+      assert.equal(error.code, 'outcome-unknown');
+      return true;
+    });
+
+    server.answer(200, { changed: true });
+    await assert.rejects(client(server).restore('doc_1', 'v1', { etag: 'E1' }), (error) => {
+      assert.equal(error.code, 'outcome-unknown');
+      return true;
+    });
+  });
+});
+
+test('a refused subdomain becomes its code with a hint', async () => {
+  await withServer(async (server) => {
+    server.answer(409, { error: { code: 'subdomain-already-set', message: 'This document already has a subdomain.' } });
+
+    await assert.rejects(client(server).claimSubdomain('doc_1', 'my-tool'), (error) => {
+      assert.ok(error instanceof ClayError);
+      assert.equal(error.code, 'subdomain-already-set');
+      assert.equal(error.hint, 'Change a subdomain in the dashboard.');
+      assert.equal(error.status, 409);
+      return true;
+    });
+  });
+});
+
 test('locate takes only the document whose URL matches', async () => {
   const listed = [
     { id: '7', url: 'https://hyperclay.com/d/budget.html' },
@@ -431,6 +486,11 @@ test('a host that never answers is host-unavailable on a read and outcome-unknow
     });
 
     await assert.rejects(api.save('doc_1', { html: '<h1>X</h1>', etag: 'E1' }), (error) => {
+      assert.equal(error.code, 'outcome-unknown');
+      return true;
+    });
+
+    await assert.rejects(api.claimSubdomain('doc_1', 'my-tool'), (error) => {
       assert.equal(error.code, 'outcome-unknown');
       return true;
     });

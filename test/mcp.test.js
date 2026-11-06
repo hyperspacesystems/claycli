@@ -92,6 +92,10 @@ function fakeAdapter({ html = ORIGINAL } = {}) {
       state.etag = nextEtag('E', state.etag);
       return { etag: state.etag };
     },
+    async claimSubdomain(id, subdomain) {
+      state.subdomain = subdomain;
+      return { subdomain, url: `https://${subdomain}.hyperclay.com`, changed: true, warnings: [] };
+    },
   };
 
   return { state, adapter };
@@ -146,15 +150,16 @@ const ANNOTATIONS = {
   edit_document: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   save_document: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   restore_version: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+  claim_subdomain: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
 };
 
-test('the server lists eleven tools with their annotations', async () => {
+test('the server lists twelve tools with their annotations', async () => {
   const { actions } = actionsFor();
   const session = await connect({ actions });
   try {
     const { tools } = await session.client.listTools();
 
-    assert.equal(tools.length, 11);
+    assert.equal(tools.length, 12);
     assert.deepEqual(tools.map((tool) => tool.name).sort(), Object.keys(ANNOTATIONS).sort());
     for (const tool of tools) {
       assert.deepEqual(tool.annotations, ANNOTATIONS[tool.name], tool.name);
@@ -172,6 +177,33 @@ test('read-only registers exactly the seven read tools', async () => {
   try {
     const { tools } = await session.client.listTools();
     assert.deepEqual(tools.map((tool) => tool.name).sort(), [...READ_TOOLS].sort());
+    assert.ok(!tools.some((tool) => tool.name === 'claim_subdomain'));
+  } finally {
+    await session.close();
+  }
+});
+
+test('claim_subdomain gives the document its address through the MCP client', async () => {
+  const { actions, fake } = actionsFor();
+  const session = await connect({ actions });
+  try {
+    const claimed = await session.client.callTool({
+      name: 'claim_subdomain',
+      arguments: { document: 'hyperclay:1', subdomain: 'my-tool' },
+    });
+
+    assert.equal(claimed.isError, undefined);
+    assert.deepEqual(claimed.structuredContent, {
+      ref: 'hyperclay:1',
+      host: 'hyperclay',
+      subdomain: 'my-tool',
+      url: 'https://my-tool.hyperclay.com',
+      changed: true,
+      warnings: [],
+    });
+    assert.deepEqual(JSON.parse(claimed.content[0].text), claimed.structuredContent);
+    assert.equal(fake.state.subdomain, 'my-tool');
+    assert.equal(fake.state.etag, 'E1');
   } finally {
     await session.close();
   }

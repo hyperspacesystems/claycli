@@ -81,5 +81,8 @@ export function hyperclayAdapter(client) {
     restore(id, versionId, { etag } = {}) {
       return client.restore(id, versionId, { etag });
     },
+    claimSubdomain(id, subdomain) {
+      return client.claimSubdomain(id, subdomain);
+    },
   };
 }

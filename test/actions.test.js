@@ -42,6 +42,7 @@ function fakeAdapter({ html = ORIGINAL } = {}) {
     versions: 0,
     version: 0,
     restore: 0,
+    claimSubdomain: 0,
   };
 
   const adapter = {
@@ -117,6 +118,11 @@ function fakeAdapter({ html = ORIGINAL } = {}) {
       }
       state.etag = nextEtag('E', state.etag);
       return { etag: state.etag };
+    },
+    async claimSubdomain(id, subdomain) {
+      calls.claimSubdomain += 1;
+      state.subdomain = subdomain;
+      return { subdomain, url: `https://${subdomain}.hyperclay.com`, changed: true, warnings: [{ code: 'dns-pending' }] };
     },
   };
 
@@ -255,6 +261,7 @@ test('read-only mode refuses every write and calls nothing', async () => {
     () => actions.edit_document({ document, edits: [{ find: 'First card', replace: 'x' }] }),
     () => actions.save_document({ document, html: '<p>x</p>' }),
     () => actions.restore_version({ document, version: 'v1' }),
+    () => actions.claim_subdomain({ document, subdomain: 'my-tool' }),
   ];
 
   for (const write of writes) {
@@ -268,6 +275,26 @@ test('read-only mode refuses every write and calls nothing', async () => {
   for (const [name, count] of Object.entries(fake.calls)) {
     assert.equal(count, 0, `${name} was called`);
   }
+});
+
+test('claim_subdomain returns the subdomain, url, changed and warnings', async () => {
+  const fake = fakeAdapter();
+  const actions = actionsFor(fake);
+
+  const result = await actions.claim_subdomain({ document: 'hyperclay:1', subdomain: 'my-tool' });
+
+  assert.deepEqual(result, {
+    ref: 'hyperclay:1',
+    host: 'hyperclay',
+    subdomain: 'my-tool',
+    url: 'https://my-tool.hyperclay.com',
+    changed: true,
+    warnings: [{ code: 'dns-pending' }],
+  });
+  assert.equal(fake.calls.claimSubdomain, 1);
+  assert.equal(fake.state.subdomain, 'my-tool');
+  assert.equal(fake.state.etag, 'E1');
+  assert.equal(result.etag, undefined);
 });
 
 test('save_document refuses html that contains an agent key', async () => {

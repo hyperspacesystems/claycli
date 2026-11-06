@@ -6,9 +6,9 @@ Let AI agents read and edit your [Hyperclay](https://hyperclay.com) documents, f
 
 ## How it works
 
-You make an **agent key** in the Hyperclay dashboard (account menu, **Agent keys…**; see [the docs](https://hyperclay.com/docs/agents/)): a named key that can be limited to one team or folder, and to reading, changing content, or full editing. You can revoke it at any time. The agent acts as you, with no more access than you have, and every change it makes is kept in the document's version history as "Recorded by you through <key name>", so any change can be restored.
+You make an **agent key** in the Hyperclay dashboard (account menu, **Agent keys…**; see [the docs](https://hyperclay.com/docs/agents/)): a named key that can be limited to one team or folder, and to reading, changing content, or full editing. You can revoke it at any time. The agent acts as you, with no more access than you have, and every change it makes to a document is kept in the document's version history as "Recorded by you through <key name>", so any change can be restored.
 
-Every write is based on the version the agent read. If the document changed in the meantime, the write is refused and the agent is told to read it again. Nothing is merged or overwritten silently.
+Every change to a document's content is based on the version the agent read. If the document changed in the meantime, the write is refused and the agent is told to read it again. Nothing is merged or overwritten silently.
 
 ## Sign in
 
@@ -58,6 +58,7 @@ Options: `mcp --read-only` offers only the reading tools.
 | `edit_document` | Replace exact text in the version read; each match must be unique |
 | `save_document` | Save a whole document |
 | `list_versions`, `read_version`, `restore_version` | Version history |
+| `claim_subdomain` | Give a document its public address at `<name>.hyperclay.com`. Version history can't undo it, and a different name takes the dashboard |
 
 Large documents (up to 5 MB) are read in pieces: an outline first, then the parts the agent needs, and small changes go through `edit_document`.
 
@@ -69,9 +70,10 @@ clay-agent read hyperclay:123 --outline
 clay-agent read hyperclay:123 --select 'main > section'
 clay-agent edit hyperclay:123 --find 'Draft' --replace 'Final' --if-match <etag>
 clay-agent versions hyperclay:123
+clay-agent subdomain hyperclay:123 my-tool
 ```
 
-A document is `hyperclay:<id>` or its hyperclay.com URL. Writes need `--if-match` with the etag from a read. Add `--json` to any command for machine-readable output.
+A document is `hyperclay:<id>` or its hyperclay.com URL. Content changes need `--if-match` with the etag from a read. Add `--json` to any command for machine-readable output.
 
 Exit codes: `0` done, `1` refused or failed, `2` the document changed since it was read (the current etag is printed), `3` the host is not reachable, `4` not signed in, or the key is malformed, revoked or expired, `5` the host may or may not have saved the write (read the document before trying again).
 

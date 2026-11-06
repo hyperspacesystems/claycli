@@ -284,5 +284,12 @@ export function createActions({ adapters, resolve, session = createSession(), re
       afterWrite(ref, result.etag);
       return { ref, host, etag: result.etag };
     },
+
+    async claim_subdomain(input = {}) {
+      refuseReadOnly();
+      const { host, adapter, id, ref } = await targetFor(input);
+      const result = await adapter.claimSubdomain(id, input.subdomain);
+      return { ref, host, subdomain: result.subdomain, url: result.url, changed: result.changed, warnings: result.warnings ?? [] };
+    },
   };
 }

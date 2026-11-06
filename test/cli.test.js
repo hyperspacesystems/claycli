@@ -73,6 +73,16 @@ async function startServer() {
       return json(response, 200, { etag: state.etag, changed: true, undoVersionId: 'v2' });
     }
 
+    if (request.method === 'POST' && tail.length === 3 && tail[0] === 'documents' && tail[2] === 'subdomain') {
+      const parsed = JSON.parse(body || '{}');
+      return json(response, 200, {
+        subdomain: parsed.subdomain,
+        url: `https://${parsed.subdomain}.hyperclay.com`,
+        changed: true,
+        warnings: [],
+      });
+    }
+
     if (tail.length === 3 && tail[0] === 'documents' && tail[2] === 'data') {
       if (request.method === 'GET') {
         return json(response, 200, { id: tail[1], etag: state.dataEtag, data: state.data });
@@ -233,7 +243,7 @@ test('mcp on stdio lists the eleven tools and keeps stdout clean', async () => {
     try {
       await client.connect(transport);
       const { tools } = await client.listTools();
-      assert.equal(tools.length, 11);
+      assert.equal(tools.length, 12);
       assert.ok(tools.some((tool) => tool.name === 'edit_document'));
     } finally {
       await client.close();
@@ -300,7 +310,7 @@ test('mcp starts without a key and answers each call with the login hint', async
     try {
       await client.connect(transport);
       const { tools } = await client.listTools();
-      assert.equal(tools.length, 11);
+      assert.equal(tools.length, 12);
 
       const read = await client.callTool({ name: 'read_document', arguments: { document: 'hyperclay:1' } });
       assert.equal(read.isError, true);
@@ -332,6 +342,32 @@ test('--help and --version exit 0, and a conflict with --json prints an etag obj
     const parsed = JSON.parse(conflict.stdout);
     assert.equal(parsed.error.code, 'conflict');
     assert.equal(parsed.error.etag, 'E2');
+  });
+});
+
+test('subdomain claims a name for the document and prints its URL', async () => {
+  await withServer(async ({ base, state, home }) => {
+    const result = await runCli(['subdomain', 'hyperclay:123', 'my-tool', '--json'], { env: envFor(home, base) });
+
+    assert.equal(result.code, 0, result.stderr);
+    const post = state.requests.filter((entry) => entry.method === 'POST' && entry.url.includes('/subdomain')).at(-1);
+    assert.ok(post, 'no subdomain claim was sent');
+    assert.equal(new URL(post.url, 'http://localhost').pathname, '/_/agent/v1/documents/123/subdomain');
+    assert.equal(post.body, JSON.stringify({ subdomain: 'my-tool' }));
+    const parsed = JSON.parse(result.stdout);
+    assert.equal(parsed.subdomain, 'my-tool');
+    assert.equal(parsed.url, 'https://my-tool.hyperclay.com');
+    assert.equal(parsed.changed, true);
+  });
+});
+
+test('subdomain without a name exits 1 with the usage line', async () => {
+  await withServer(async ({ base, state, home }) => {
+    const result = await runCli(['subdomain', 'hyperclay:123'], { env: envFor(home, base) });
+
+    assert.equal(result.code, 1);
+    assert.match(result.stderr, /Usage: clay-agent subdomain <document> <name>/);
+    assert.equal(state.requests.length, 0);
   });
 });
 
