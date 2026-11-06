@@ -1,6 +1,6 @@
 # @panphora/clay-agent
 
-Let AI agents read and edit your [Hyperclay](https://hyperclay.com) documents, from the command line or as an MCP server for Claude Code, Claude Desktop and Cursor.
+Let AI agents read and edit [Hyperclay](https://hyperclay.com) HTML files, from the command line or as an MCP server for Claude Code, Claude Desktop and Cursor.
 
 > Works with hyperclay.com. Support for the HTML Clay and Hyperclay Local desktop apps comes in a later version.
 
