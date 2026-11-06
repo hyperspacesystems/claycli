@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.0] - 2026-11-06
+
+### Added
+- Claim a subdomain for a document from the CLI or through MCP.
+
 ## [0.1.1] - 2026-11-01
 
 ### Changed
