@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.1] - 2026-11-07
+
+### Changed
+- No user-facing changes.
+
 ## [0.2.0] - 2026-11-06
 
 ### Added
