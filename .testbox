@@ -1,0 +1,8 @@
+# Runs the full `npm test` suite (node --test, no browser) on a throwaway box: `testbox run`.
+# See ~/Documents/GitHub/bash_commands/testbox/README.md.
+TESTBOX_REPO=clay-agent
+# npmrelease runs this box instead of the local suite, and publishes with --ignore-scripts.
+TESTBOX_RELEASE=1
+TESTBOX_SETUP='npm ci --no-audit --no-fund'
+TESTBOX_COMMAND='npm test'
+TESTBOX_TIMEOUT=${TESTBOX_TIMEOUT:-20m}

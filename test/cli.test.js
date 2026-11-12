@@ -25,6 +25,7 @@ async function startServer() {
     dataEtag: 'D1',
     requests: [],
     next: null,
+    claimError: null,
   };
 
   function json(response, status, body) {
@@ -78,6 +79,53 @@ async function startServer() {
       return json(response, 200, {
         subdomain: parsed.subdomain,
         url: `https://${parsed.subdomain}.hyperclay.com`,
+        changed: true,
+        warnings: [],
+      });
+    }
+
+    if (request.method === 'GET' && tail.length === 1 && tail[0] === 'whoami') {
+      return json(response, 200, {
+        features: ['sites', 'folder-subdomain', 'custom-domains', 'files', 'file-writes'],
+      });
+    }
+
+    if (request.method === 'GET' && tail.length === 1 && tail[0] === 'sites') {
+      return json(response, 200, {
+        sites: [{ id: 42, ref: 'hyperclay:42', path: 'demos/maya', url: 'https://maya.hyperclay.com' }],
+        nextCursor: null,
+      });
+    }
+
+    if (request.method === 'PUT' && tail.length === 1 && tail[0] === 'files') {
+      response.writeHead(201, { 'content-type': 'application/json', etag: 'F1' });
+      return response.end(JSON.stringify({ path: url.searchParams.get('path'), etag: 'F1', changed: true }));
+    }
+
+    if (request.method === 'GET' && tail.length === 1 && tail[0] === 'files') {
+      return json(response, 200, {
+        account: 'acct_1',
+        path: url.searchParams.get('path') ?? '',
+        files: [],
+        nextCursor: null,
+      });
+    }
+
+    if (request.method === 'POST' && tail.length === 3 && tail[0] === 'sites' && tail[2] === 'subdomain') {
+      if (state.claimError) return json(response, 409, { error: state.claimError });
+      const parsed = JSON.parse(body || '{}');
+      return json(response, 200, {
+        subdomain: parsed.subdomain,
+        url: `https://${parsed.subdomain}.hyperclay.com`,
+        changed: true,
+        warnings: [],
+      });
+    }
+
+    if (request.method === 'POST' && tail.length === 3 && tail[0] === 'documents' && tail[2] === 'domains') {
+      const parsed = JSON.parse(body || '{}');
+      return json(response, 200, {
+        domain: { domain: parsed.domain, alsoWww: parsed.alsoWww },
         changed: true,
         warnings: [],
       });
@@ -149,6 +197,16 @@ function runCli(args, { env, input = '' } = {}) {
 
 async function tempHome() {
   return fs.mkdtemp(path.join(os.tmpdir(), 'clay-agent-cli-test-'));
+}
+
+async function tempFolder(files) {
+  const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'clay-agent-publish-test-'));
+  for (const [name, contents] of Object.entries(files)) {
+    const target = path.join(folder, name);
+    await fs.mkdir(path.dirname(target), { recursive: true });
+    await fs.writeFile(target, contents);
+  }
+  return folder;
 }
 
 async function withServer(fn) {
@@ -229,7 +287,7 @@ test('read without a key exits 4', async () => {
   });
 });
 
-test('mcp on stdio lists the eleven tools and keeps stdout clean', async () => {
+test('mcp on stdio lists every tool and keeps stdout clean', async () => {
   await withServer(async ({ base, home }) => {
     const transport = new StdioClientTransport({
       command: process.execPath,
@@ -243,7 +301,7 @@ test('mcp on stdio lists the eleven tools and keeps stdout clean', async () => {
     try {
       await client.connect(transport);
       const { tools } = await client.listTools();
-      assert.equal(tools.length, 12);
+      assert.equal(tools.length, 17);
       assert.ok(tools.some((tool) => tool.name === 'edit_document'));
     } finally {
       await client.close();
@@ -310,7 +368,7 @@ test('mcp starts without a key and answers each call with the login hint', async
     try {
       await client.connect(transport);
       const { tools } = await client.listTools();
-      assert.equal(tools.length, 12);
+      assert.equal(tools.length, 17);
 
       const read = await client.callTool({ name: 'read_document', arguments: { document: 'hyperclay:1' } });
       assert.equal(read.isError, true);
@@ -366,8 +424,63 @@ test('subdomain without a name exits 1 with the usage line', async () => {
     const result = await runCli(['subdomain', 'hyperclay:123'], { env: envFor(home, base) });
 
     assert.equal(result.code, 1);
-    assert.match(result.stderr, /Usage: clay-agent subdomain <document> <name>/);
+    assert.match(result.stderr, /Usage: clay-agent subdomain \(<document> \| --site <site>\) <name> \[--account <name>\]/);
     assert.equal(state.requests.length, 0);
+  });
+});
+
+test('subdomain --site claims the site folder and prints its URL', async () => {
+  await withServer(async ({ base, state, home }) => {
+    const result = await runCli(['subdomain', '--site', 'demos/maya', 'maya', '--json'], { env: envFor(home, base) });
+
+    assert.equal(result.code, 0, result.stderr);
+    const post = state.requests.filter((entry) => entry.method === 'POST').at(-1);
+    assert.equal(new URL(post.url, 'http://localhost').pathname, '/_/agent/v1/sites/42/subdomain');
+    assert.equal(post.body, JSON.stringify({ subdomain: 'maya' }));
+    assert.equal(JSON.parse(result.stdout).url, 'https://maya.hyperclay.com');
+  });
+});
+
+test('subdomain --site with a local folder exits 1 and sends no POST', async () => {
+  await withServer(async ({ base, state, home }) => {
+    const result = await runCli(['subdomain', '--site', './maya', 'maya', '--json'], { env: envFor(home, base) });
+
+    assert.equal(result.code, 1);
+    assert.equal(JSON.parse(result.stderr).error.code, 'invalid-argument');
+    assert.equal(state.requests.filter((entry) => entry.method === 'POST').length, 0);
+  });
+});
+
+test('domain add posts the domain and --also-www to the document', async () => {
+  await withServer(async ({ base, state, home }) => {
+    const result = await runCli(['domain', 'add', 'hyperclay:123', 'app.example', '--also-www', '--json'], {
+      env: envFor(home, base),
+    });
+
+    assert.equal(result.code, 0, result.stderr);
+    const post = state.requests.filter((entry) => entry.method === 'POST').at(-1);
+    assert.equal(new URL(post.url, 'http://localhost').pathname, '/_/agent/v1/documents/123/domains');
+    assert.equal(post.body, JSON.stringify({ domain: 'app.example', alsoWww: true }));
+  });
+});
+
+test('domain frob prints the domain usage and exits 1', async () => {
+  await withServer(async ({ base, state, home }) => {
+    const result = await runCli(['domain', 'frob'], { env: envFor(home, base) });
+
+    assert.equal(result.code, 1);
+    assert.match(result.stderr, /Usage: clay-agent domain \(add \(<document> \| --site <site>\) <domain> \[--also-www\] \| status \(<document> \| --site <site>\)\)/);
+    assert.equal(state.requests.length, 0);
+  });
+});
+
+test('files sends the folder path to the files endpoint', async () => {
+  await withServer(async ({ base, state, home }) => {
+    const result = await runCli(['files', 'demos/maya', '--json'], { env: envFor(home, base) });
+
+    assert.equal(result.code, 0, result.stderr);
+    const get = state.requests.filter((entry) => entry.method === 'GET').at(-1);
+    assert.ok(get.url.endsWith('/files?path=demos%2Fmaya'), get.url);
   });
 });
 
@@ -444,6 +557,76 @@ test('mcp refuses --host, positionals and unknown hosts with a usage message', a
       const result = await runCli(args, { env });
       assert.equal(result.code, 1, args.join(' '));
       assert.match(result.stderr, /Usage: clay-agent mcp/, args.join(' '));
+    }
+  });
+});
+
+test('publish --dry-run lists what it would create and sends no PUT', async () => {
+  await withServer(async ({ base, state, home }) => {
+    const folder = await tempFolder({ 'index.html': HTML });
+    try {
+      const result = await runCli(['publish', folder, 'demos/maya', '--dry-run', '--json'], { env: envFor(home, base) });
+
+      assert.equal(result.code, 0, result.stderr);
+      assert.equal(state.requests.filter((entry) => entry.method === 'PUT').length, 0);
+      const parsed = JSON.parse(result.stdout);
+      assert.deepEqual(parsed.create, ['index.html', 'site.json']);
+    } finally {
+      await fs.rm(folder, { recursive: true, force: true });
+    }
+  });
+});
+
+test('publish sends two PUTs in order and exits 0', async () => {
+  await withServer(async ({ base, state, home }) => {
+    const folder = await tempFolder({ 'index.html': HTML });
+    try {
+      const result = await runCli(['publish', folder, 'demos/maya', '--json'], { env: envFor(home, base) });
+
+      assert.equal(result.code, 0, result.stderr);
+      const puts = state.requests.filter((entry) => entry.method === 'PUT');
+      const paths = puts.map((entry) => new URL(entry.url, 'http://localhost').searchParams.get('path'));
+      assert.deepEqual(paths, ['demos/maya/index.html', 'demos/maya/site.json']);
+    } finally {
+      await fs.rm(folder, { recursive: true, force: true });
+    }
+  });
+});
+
+test('publish with a refused file claims no address and exits 1', async () => {
+  await withServer(async ({ base, state, home }) => {
+    const folder = await tempFolder({ 'index.html': HTML, 'About.html': HTML });
+    try {
+      const result = await runCli(['publish', folder, 'demos/maya', '--subdomain', 'maya', '--json'], { env: envFor(home, base) });
+
+      assert.equal(result.code, 1);
+      const parsed = JSON.parse(result.stdout);
+      assert.deepEqual(parsed.refused.map((entry) => [entry.path, entry.reason]), [['About.html', 'page-name']]);
+      assert.deepEqual(parsed.created, ['index.html', 'site.json']);
+      assert.equal(parsed.subdomain.claimed, false);
+      assert.equal(state.requests.filter((entry) => entry.method === 'POST').length, 0);
+    } finally {
+      await fs.rm(folder, { recursive: true, force: true });
+    }
+  });
+});
+
+test('publish whose address claim is refused keeps the report and exits 1', async () => {
+  await withServer(async ({ base, state, home }) => {
+    state.claimError = { code: 'name-in-use', message: 'That name is taken.' };
+    const folder = await tempFolder({ 'index.html': HTML });
+    try {
+      const result = await runCli(['publish', folder, 'demos/maya', '--subdomain', 'maya', '--json'], { env: envFor(home, base) });
+
+      assert.equal(result.code, 1);
+      const parsed = JSON.parse(result.stdout);
+      assert.deepEqual(parsed.created, ['index.html', 'site.json']);
+      assert.deepEqual(parsed.failed, []);
+      assert.equal(parsed.subdomain.claimed, false);
+      assert.equal(parsed.subdomain.code, 'name-in-use');
+      assert.equal(parsed.subdomain.message, 'That name is taken.');
+    } finally {
+      await fs.rm(folder, { recursive: true, force: true });
     }
   });
 });

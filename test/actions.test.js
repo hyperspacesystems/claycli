@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import test from 'node:test';
 
 import { createActions } from '../src/actions.js';
@@ -30,6 +33,8 @@ function fakeAdapter({ html = ORIGINAL } = {}) {
     data: { title: 'Notes' },
     dataEtag: 'D1',
     lastSaveEtag: null,
+    uploads: [],
+    remoteFiles: [],
   };
   const calls = {
     locate: 0,
@@ -43,6 +48,14 @@ function fakeAdapter({ html = ORIGINAL } = {}) {
     version: 0,
     restore: 0,
     claimSubdomain: 0,
+    locateSite: 0,
+    claimSiteSubdomain: 0,
+    listSites: 0,
+    listFiles: 0,
+    addDomain: 0,
+    domainStatus: 0,
+    putFile: 0,
+    listAllFiles: 0,
   };
 
   const adapter = {
@@ -123,6 +136,42 @@ function fakeAdapter({ html = ORIGINAL } = {}) {
       calls.claimSubdomain += 1;
       state.subdomain = subdomain;
       return { subdomain, url: `https://${subdomain}.hyperclay.com`, changed: true, warnings: [{ code: 'dns-pending' }] };
+    },
+    async locateSite({ site }) {
+      calls.locateSite += 1;
+      if (site !== 'demos/maya') throw new ClayError('not-found', 'No site folder there that this key can reach.');
+      return { id: '42', ref: 'hyperclay:42' };
+    },
+    async claimSiteSubdomain(id, subdomain) {
+      calls.claimSiteSubdomain += 1;
+      state.siteSubdomain = { id, subdomain };
+      return { subdomain, url: `https://${subdomain}.hyperclay.com`, changed: true, warnings: [] };
+    },
+    async listSites() {
+      calls.listSites += 1;
+      return { sites: [{ id: '42', ref: 'hyperclay:42', path: 'demos/maya' }], nextCursor: null };
+    },
+    async listFiles({ path }) {
+      calls.listFiles += 1;
+      return { account: 'ann', path, files: [], nextCursor: null };
+    },
+    async addDomain(kind, id, { domain, alsoWww }) {
+      calls.addDomain += 1;
+      state.domain = { kind, id, domain, alsoWww };
+      return { domain: { id: 5, domain, status: 'pending', dnsRecords: [] }, changed: true, warnings: [] };
+    },
+    async domainStatus(kind, id) {
+      calls.domainStatus += 1;
+      return { domains: [{ id: 5, domain: 'maya.example', status: 'pending' }] };
+    },
+    async putFile(filePath, bytes, options = {}) {
+      calls.putFile += 1;
+      state.uploads.push([filePath, options.create ? 'create' : `replace:${options.etag}`, options.account ?? null]);
+      return { path: filePath, etag: 'U1', changed: true, created: options.create };
+    },
+    async listAllFiles({ path: folderPath } = {}) {
+      calls.listAllFiles += 1;
+      return state.remoteFiles.filter((entry) => entry.path.startsWith(`${folderPath}/`));
     },
   };
 
@@ -262,6 +311,9 @@ test('read-only mode refuses every write and calls nothing', async () => {
     () => actions.save_document({ document, html: '<p>x</p>' }),
     () => actions.restore_version({ document, version: 'v1' }),
     () => actions.claim_subdomain({ document, subdomain: 'my-tool' }),
+    () => actions.claim_subdomain({ site: 'demos/maya', subdomain: 'x' }),
+    () => actions.add_domain({ site: 'demos/maya', domain: 'a.example' }),
+    () => actions.publish_site({ folder: '.', to: 'x' }),
   ];
 
   for (const write of writes) {
@@ -295,6 +347,136 @@ test('claim_subdomain returns the subdomain, url, changed and warnings', async (
   assert.equal(fake.state.subdomain, 'my-tool');
   assert.equal(fake.state.etag, 'E1');
   assert.equal(result.etag, undefined);
+});
+
+test('claim_subdomain claims a site folder by its path', async () => {
+  const fake = fakeAdapter();
+  const actions = actionsFor(fake);
+
+  const result = await actions.claim_subdomain({ site: 'demos/maya', subdomain: 'maya' });
+
+  assert.deepEqual(result, {
+    ref: 'hyperclay:42', host: 'hyperclay', subdomain: 'maya', url: 'https://maya.hyperclay.com', changed: true, warnings: [],
+  });
+  assert.deepEqual(fake.state.siteSubdomain, { id: '42', subdomain: 'maya' });
+  assert.equal(fake.calls.claimSubdomain, 0);
+});
+
+test('claim_subdomain and add_domain need exactly one of document and site', async () => {
+  const fake = fakeAdapter();
+  const actions = actionsFor(fake);
+  for (const input of [{ subdomain: 'x' }, { document: 'hyperclay:1', site: 'demos/maya', subdomain: 'x' }]) {
+    await assert.rejects(actions.claim_subdomain(input), (error) => error.code === 'invalid-argument');
+  }
+  await assert.rejects(actions.add_domain({ domain: 'a.example' }), (error) => error.code === 'invalid-argument');
+  assert.equal(fake.calls.claimSiteSubdomain + fake.calls.claimSubdomain + fake.calls.addDomain, 0);
+});
+
+test('add_domain adds a domain to a site folder and to a document', async () => {
+  const fake = fakeAdapter();
+  const actions = actionsFor(fake);
+
+  const viaSite = await actions.add_domain({ site: 'demos/maya', domain: 'maya.example', alsoWww: true });
+
+  assert.deepEqual(viaSite, {
+    ref: 'hyperclay:42',
+    host: 'hyperclay',
+    domain: { id: 5, domain: 'maya.example', status: 'pending', dnsRecords: [] },
+    changed: true,
+    warnings: [],
+  });
+  assert.deepEqual(fake.state.domain, { kind: 'sites', id: '42', domain: 'maya.example', alsoWww: true });
+
+  await actions.add_domain({ document: 'hyperclay:1', domain: 'a.example' });
+
+  assert.deepEqual(fake.state.domain, { kind: 'documents', id: '1', domain: 'a.example', alsoWww: false });
+  assert.equal(fake.calls.addDomain, 2);
+});
+
+test('domain_status answers the domains for a site folder', async () => {
+  const fake = fakeAdapter();
+  const actions = actionsFor(fake);
+
+  const result = await actions.domain_status({ site: 'demos/maya' });
+
+  assert.deepEqual(result, { ref: 'hyperclay:42', host: 'hyperclay', domains: [{ id: 5, domain: 'maya.example', status: 'pending' }] });
+  assert.equal(fake.calls.domainStatus, 1);
+});
+
+test('list_sites and list_files answer what the adapter returns', async () => {
+  const fake = fakeAdapter();
+  const actions = actionsFor(fake);
+
+  assert.deepEqual(await actions.list_sites(), {
+    sites: [{ id: '42', ref: 'hyperclay:42', path: 'demos/maya' }],
+    nextCursor: null,
+  });
+  assert.deepEqual(await actions.list_files({ path: 'demos/maya' }), {
+    account: 'ann', path: 'demos/maya', files: [], nextCursor: null,
+  });
+  assert.equal(fake.calls.listSites, 1);
+  assert.equal(fake.calls.listFiles, 1);
+});
+
+test('publish_site plans a local folder, then publishes it', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'clay-actions-publish-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await fs.writeFile(path.join(root, 'index.html'), '<html></html>');
+
+  const fake = fakeAdapter();
+  const actions = actionsFor(fake, { cwd: root });
+
+  const dry = await actions.publish_site({ folder: '.', to: 'demos/maya', dryRun: true });
+
+  assert.deepEqual(dry, {
+    host: 'hyperclay',
+    to: 'demos/maya',
+    dryRun: true,
+    create: ['index.html', 'site.json'],
+    replace: [],
+    unchanged: [],
+    remoteOnly: [],
+    skipped: [],
+    refused: [],
+  });
+  assert.equal(fake.calls.putFile, 0);
+  assert.equal(fake.calls.listAllFiles, 1);
+
+  const real = await actions.publish_site({ folder: '.', to: 'demos/maya' });
+
+  assert.deepEqual(real, {
+    host: 'hyperclay',
+    to: 'demos/maya',
+    dryRun: false,
+    created: ['index.html', 'site.json'],
+    replaced: [],
+    unchanged: [],
+    failed: [],
+    pending: [],
+    remoteOnly: [],
+    skipped: [],
+    refused: [],
+    subdomain: null,
+  });
+  assert.equal(fake.calls.putFile, 2);
+  assert.deepEqual(fake.state.uploads.map((upload) => upload[0]), ['demos/maya/index.html', 'demos/maya/site.json']);
+});
+
+test('publish_site passes refused files on so the address is not claimed', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'clay-actions-publish-refused-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await fs.writeFile(path.join(root, 'index.html'), '<html></html>');
+  await fs.writeFile(path.join(root, 'About.html'), '<html></html>');
+
+  const fake = fakeAdapter();
+  const actions = actionsFor(fake, { cwd: root });
+
+  const result = await actions.publish_site({ folder: '.', to: 'demos/maya', subdomain: 'maya' });
+
+  assert.deepEqual(result.refused.map((entry) => [entry.path, entry.reason]), [['About.html', 'page-name']]);
+  assert.deepEqual(result.created, ['index.html', 'site.json']);
+  assert.equal(result.subdomain.claimed, false);
+  assert.equal(fake.calls.claimSiteSubdomain, 0);
 });
 
 test('save_document refuses html that contains an agent key', async () => {

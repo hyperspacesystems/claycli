@@ -29,7 +29,12 @@ Usage:
   clay-agent versions <document> [--before <id>]
   clay-agent version <document> <version-id> [--select <css>] [--range <start:length>]
   clay-agent restore <document> <version-id> --if-match <etag>
-  clay-agent subdomain <document> <name>
+  clay-agent subdomain (<document> | --site <site>) <name> [--account <name>]
+  clay-agent sites [--account <name>] [--cursor <id>]
+  clay-agent files <path> [--account <name>] [--cursor <id>]
+  clay-agent domain add (<document> | --site <site>) <domain> [--also-www]
+  clay-agent domain status (<document> | --site <site>)
+  clay-agent publish <folder> <account folder> [--subdomain <name>] [--account <name>] [--dry-run]
 
 Document commands take --json, --host <host> and --hyperclay-url <url>.
 Your agent key is only read from stdin or the CLAY_AGENT_KEY environment variable.
@@ -181,7 +186,11 @@ const COMMAND_USAGE = {
   versions: 'Usage: clay-agent versions <document> [--before <id>]',
   version: 'Usage: clay-agent version <document> <version-id> [--select <css>] [--range <start:length>]',
   restore: 'Usage: clay-agent restore <document> <version-id> --if-match <etag>',
-  subdomain: 'Usage: clay-agent subdomain <document> <name>',
+  subdomain: 'Usage: clay-agent subdomain (<document> | --site <site>) <name> [--account <name>]',
+  sites: 'Usage: clay-agent sites [--account <name>] [--cursor <id>]',
+  files: 'Usage: clay-agent files <path> [--account <name>] [--cursor <id>]',
+  domain: 'Usage: clay-agent domain (add (<document> | --site <site>) <domain> [--also-www] | status (<document> | --site <site>))',
+  publish: 'Usage: clay-agent publish <folder> <account folder> [--subdomain <name>] [--account <name>] [--dry-run]',
   mcp: 'Usage: clay-agent mcp [--read-only] [--hosts <a,b>]',
 };
 
@@ -204,12 +213,17 @@ const FLAG_NAMES = {
   '--file': 'file',
   '--before': 'before',
   '--hosts': 'hosts',
+  '--site': 'site',
+  '--account': 'account',
+  '--subdomain': 'subdomain',
 };
 
 const BOOLEAN_FLAGS = {
   '--json': 'json',
   '--outline': 'outline',
   '--read-only': 'readOnly',
+  '--also-www': 'alsoWww',
+  '--dry-run': 'dryRun',
 };
 
 function usageFailure(usage) {
@@ -263,6 +277,20 @@ function documentInput(positionals, flags) {
   const input = { document: positionals[0] };
   if (flags.host !== undefined) input.host = flags.host;
   return input;
+}
+
+// A command's target: a document as its first word, or a site folder with --site. Answers the input
+// and the words after the target.
+function nodeInput(positionals, flags, usage, wordsAfter) {
+  if (flags.site !== undefined) {
+    requirePositionals(positionals, wordsAfter, usage);
+    const input = { site: flags.site };
+    if (flags.account !== undefined) input.account = flags.account;
+    if (flags.host !== undefined) input.host = flags.host;
+    return { input, words: positionals };
+  }
+  requirePositionals(positionals, wordsAfter + 1, usage);
+  return { input: documentInput(positionals, flags), words: positionals.slice(1) };
 }
 
 async function buildForDocument(context, flags) {
@@ -453,12 +481,68 @@ async function restoreCommand(argv, context) {
 async function subdomainCommand(argv, context) {
   const usage = COMMAND_USAGE.subdomain;
   const { flags, positionals } = parseCommandArgv(argv, usage);
-  requirePositionals(positionals, 2, usage);
+  const { input, words } = nodeInput(positionals, flags, usage, 1);
   const actions = await buildForDocument(context, flags);
-  const input = documentInput(positionals, flags);
-  input.subdomain = positionals[1];
+  input.subdomain = words[0];
   printResult(await actions.claim_subdomain(input), flags, context);
   return 0;
+}
+
+async function sitesCommand(argv, context) {
+  const usage = COMMAND_USAGE.sites;
+  const { flags } = parseCommandArgv(argv, usage);
+  const actions = await buildForDocument(context, flags);
+  const input = {};
+  if (flags.account !== undefined) input.account = flags.account;
+  if (flags.cursor !== undefined) input.cursor = flags.cursor;
+  printResult(await actions.list_sites(input), flags, context);
+  return 0;
+}
+
+async function filesCommand(argv, context) {
+  const usage = COMMAND_USAGE.files;
+  const { flags, positionals } = parseCommandArgv(argv, usage);
+  requirePositionals(positionals, 1, usage);
+  const actions = await buildForDocument(context, flags);
+  const input = { path: positionals[0] };
+  if (flags.account !== undefined) input.account = flags.account;
+  if (flags.cursor !== undefined) input.cursor = flags.cursor;
+  printResult(await actions.list_files(input), flags, context);
+  return 0;
+}
+
+async function domainCommand(argv, context) {
+  const usage = COMMAND_USAGE.domain;
+  const [verb, ...rest] = argv;
+  const { flags, positionals } = parseCommandArgv(rest, usage);
+  if (verb === 'add') {
+    const { input, words } = nodeInput(positionals, flags, usage, 1);
+    const actions = await buildForDocument(context, flags);
+    input.domain = words[0];
+    if (flags.alsoWww) input.alsoWww = true;
+    printResult(await actions.add_domain(input), flags, context);
+    return 0;
+  }
+  if (verb === 'status') {
+    const { input } = nodeInput(positionals, flags, usage, 0);
+    const actions = await buildForDocument(context, flags);
+    printResult(await actions.domain_status(input), flags, context);
+    return 0;
+  }
+  throw usageFailure(usage);
+}
+
+async function publishCommand(argv, context) {
+  const usage = COMMAND_USAGE.publish;
+  const { flags, positionals } = parseCommandArgv(argv, usage);
+  requirePositionals(positionals, 2, usage);
+  const actions = await buildForDocument(context, flags);
+  const input = { folder: positionals[0], to: positionals[1], dryRun: flags.dryRun === true };
+  if (flags.subdomain !== undefined) input.subdomain = flags.subdomain;
+  if (flags.account !== undefined) input.account = flags.account;
+  const result = await actions.publish_site(input);
+  printResult(result, flags, context);
+  return result.failed?.length || result.pending?.length || result.refused?.length || (input.subdomain !== undefined && !result.subdomain?.claimed) ? 1 : 0;
 }
 
 async function mcpCommand(argv, context) {
@@ -497,6 +581,10 @@ async function dispatch(argv, context) {
   if (command === 'version') return versionCommand(rest, context);
   if (command === 'restore') return restoreCommand(rest, context);
   if (command === 'subdomain') return subdomainCommand(rest, context);
+  if (command === 'sites') return sitesCommand(rest, context);
+  if (command === 'files') return filesCommand(rest, context);
+  if (command === 'domain') return domainCommand(rest, context);
+  if (command === 'publish') return publishCommand(rest, context);
   context.stderr.write(USAGE);
   return 1;
 }

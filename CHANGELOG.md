@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.0] - 2026-11-12
+
+### Added
+- Publish a local folder as a site with `publish` or the `publish_site` tool. It sends only what changed, never deletes anything on hyperclay.com, and claims the subdomain last.
+- Claim a subdomain for a site folder (a folder that holds its own `site.json`), from the CLI with `subdomain --site` or through MCP with `claim_subdomain`.
+- List your site folders (`sites` and `list_sites`) and the files in a folder (`files` and `list_files`).
+- Add a custom domain to a document or a site folder and check its DNS records and status (`domain add`, `domain status`, `add_domain` and `domain_status`). Agents can add domains, never remove them.
+- A clear "hyperclay.com does not offer this yet." answer when hyperclay.com is older than clay-agent.
+
 ## [0.2.1] - 2026-11-07
 
 ### Changed

@@ -33,6 +33,14 @@ async function startServer() {
     versions: [
       { id: 'v1', createdAt: '2024-01-01T00:00:00.000Z', recordedBy: { name: 'Ann' }, kind: 'edit' },
     ],
+    features: ['sites', 'folder-subdomain', 'custom-domains', 'files'],
+    sites: [
+      { id: 42, ref: 'hyperclay:42', account: 'acct_1', path: 'demos/maya', url: 'https://acct_1.hyperclay.com/demos/maya/', subdomain: null, address: 'https://acct_1.hyperclay.com/demos/maya/', home: null, pages: 1 },
+    ],
+    filePages: [
+      [{ id: 1, path: 'demos/maya/a.html', kind: 'file', etag: 'F1', size: 3, updatedAt: '2024-01-01T00:00:00.000Z' }],
+      [{ id: 2, path: 'demos/maya/b.css', kind: 'file', etag: 'F2', size: 4, updatedAt: '2024-01-01T00:00:00.000Z' }],
+    ],
   };
 
   function json(response, status, body, headers = {}) {
@@ -124,6 +132,31 @@ async function startServer() {
       return json(response, 200, { etag: doc.etag });
     }
 
+    if (request.method === 'GET' && tail.length === 1 && tail[0] === 'whoami') {
+      return json(response, 200, { person: { username: 'acct_1' }, key: {}, features: state.features });
+    }
+
+    if (request.method === 'GET' && tail.length === 1 && tail[0] === 'sites') {
+      const wanted = url.searchParams.get('path');
+      const sites = wanted ? state.sites.filter((site) => site.path === wanted) : state.sites;
+      return json(response, 200, { sites, nextCursor: null });
+    }
+
+    if (request.method === 'GET' && tail.length === 1 && tail[0] === 'files') {
+      const wanted = url.searchParams.get('path');
+      if (wanted === 'demos/missing') {
+        return refusal(response, 404, 'not-found', 'No folder there.');
+      }
+      const cursor = url.searchParams.get('cursor');
+      const files = cursor ? state.filePages[1] : state.filePages[0];
+      return json(response, 200, { account: 'acct_1', path: wanted, files, nextCursor: cursor ? null : 'p2' });
+    }
+
+    if (request.method === 'POST' && tail.length === 3 && tail[0] === 'sites' && tail[2] === 'subdomain') {
+      const parsed = JSON.parse(body || '{}');
+      return json(response, 200, { subdomain: parsed.subdomain, url: `https://${parsed.subdomain}.hyperclay.com`, changed: true, warnings: [] });
+    }
+
     return refusal(response, 404, 'not-found', 'No route.');
   }
 
@@ -132,7 +165,8 @@ async function startServer() {
     request.on('data', (chunk) => chunks.push(chunk));
     request.on('end', () => {
       const body = Buffer.concat(chunks).toString('utf8');
-      state.requests.push({ method: request.method, url: request.url, headers: request.headers, body });
+      const raw = Buffer.concat(chunks);
+      state.requests.push({ method: request.method, url: request.url, headers: request.headers, body, raw });
       const next = state.next;
       state.next = null;
       if (next?.destroy) {
@@ -415,6 +449,163 @@ test('claimSubdomain returns a 200 answer with no etag as is and sends no If-Mat
   });
 });
 
+test('claimSiteSubdomain posts to the site route with no If-Match and treats an answer without a subdomain as unknown', async () => {
+  await withServer(async (server) => {
+    server.answer(200, { subdomain: 'maya', url: 'https://maya.hyperclay.com', changed: true, warnings: [] });
+    const result = await client(server).claimSiteSubdomain('42', 'maya');
+    assert.equal(result.subdomain, 'maya');
+    const seen = server.state.requests.at(-1);
+    assert.equal(seen.method, 'POST');
+    assert.equal(new URL(seen.url, 'http://localhost').pathname, '/_/agent/v1/sites/42/subdomain');
+    assert.deepEqual(JSON.parse(seen.body), { subdomain: 'maya' });
+    assert.equal(seen.headers['if-match'], undefined);
+
+    server.answer(200, { changed: true });
+    await assert.rejects(client(server).claimSiteSubdomain('42', 'maya'), (error) => error.code === 'outcome-unknown');
+  });
+});
+
+test('features asks whoami once per client and answers an empty list when the server sends none', async () => {
+  await withServer(async (server) => {
+    server.answer(200, { account: { id: 'acct_1' } });
+    const api = client(server);
+
+    const first = await api.features();
+    const second = await api.features();
+
+    assert.deepEqual(first, []);
+    assert.deepEqual(second, []);
+    assert.equal(server.state.requests.length, 1);
+    assert.equal(new URL(server.state.requests[0].url, 'http://localhost').pathname, '/_/agent/v1/whoami');
+  });
+});
+
+test('listSites sends path and no account when only a path is given', async () => {
+  await withServer(async (server) => {
+    server.answer(200, { sites: [], nextCursor: null });
+
+    const result = await client(server).listSites({ path: 'demos/maya' });
+    assert.deepEqual(result, { sites: [], nextCursor: null });
+
+    const seen = server.state.requests.at(-1);
+    assert.equal(seen.method, 'GET');
+    const url = new URL(seen.url, 'http://localhost');
+    assert.equal(url.pathname, '/_/agent/v1/sites');
+    assert.equal(url.searchParams.get('path'), 'demos/maya');
+    assert.ok(url.search.includes('path=demos%2Fmaya'));
+    assert.equal(url.searchParams.get('account'), null);
+  });
+});
+
+test('listFiles sends both path and cursor', async () => {
+  await withServer(async (server) => {
+    server.answer(200, { files: [], nextCursor: null });
+
+    await client(server).listFiles({ path: 'demos/maya', cursor: '9' });
+
+    const seen = server.state.requests.at(-1);
+    const url = new URL(seen.url, 'http://localhost');
+    assert.equal(url.pathname, '/_/agent/v1/files');
+    assert.equal(url.searchParams.get('path'), 'demos/maya');
+    assert.equal(url.searchParams.get('cursor'), '9');
+    assert.ok(url.search.includes('path=demos%2Fmaya'));
+    assert.ok(url.search.includes('cursor=9'));
+  });
+});
+
+test('putFile sends raw bytes with If-None-Match: * to create and If-Match to replace', async () => {
+  await withServer(async (server) => {
+    const bytes = Buffer.from([0, 255, 1, 254]);
+    server.answer(201, { id: 9, path: 'demos/maya/a.bin', kind: 'file', etag: 'E1', changed: true, created: true, folders: [] });
+    await client(server).putFile('demos/maya/a.bin', bytes, { create: true });
+    let seen = server.state.requests.at(-1);
+    assert.equal(seen.method, 'PUT');
+    const url = new URL(seen.url, 'http://localhost');
+    assert.equal(url.pathname, '/_/agent/v1/files');
+    assert.equal(url.searchParams.get('path'), 'demos/maya/a.bin');
+    assert.equal(seen.headers['if-none-match'], '*');
+    assert.equal(seen.headers['if-match'], undefined);
+    assert.equal(seen.headers['content-type'], 'application/octet-stream');
+    assert.match(seen.headers['x-operation-id'], UUID_PATTERN);
+    assert.equal(Buffer.compare(seen.raw, bytes), 0);
+
+    server.answer(200, { id: 9, path: 'demos/maya/a.bin', kind: 'file', etag: 'E2', changed: true, created: false, folders: [] });
+    await client(server).putFile('demos/maya/a.bin', bytes, { etag: 'E1' });
+    seen = server.state.requests.at(-1);
+    assert.equal(seen.headers['if-match'], 'E1');
+    assert.equal(seen.headers['if-none-match'], undefined);
+
+    await assert.rejects(client(server).putFile('demos/maya/a.bin', bytes, {}), (error) => error.code === 'read-first');
+  });
+});
+
+test('listAllFiles follows nextCursor across pages and answers [] for a missing folder', async () => {
+  await withServer(async (server) => {
+    const adapter = hyperclayAdapter(client(server));
+
+    const files = await adapter.listAllFiles({ path: 'demos/maya' });
+    assert.deepEqual(files.map((file) => file.id), [1, 2]);
+    const seen = server.state.requests.map((request) => {
+      const url = new URL(request.url, 'http://localhost');
+      return `${url.pathname} ${url.searchParams.get('cursor')}`;
+    });
+    assert.deepEqual(seen, [
+      '/_/agent/v1/whoami null',
+      '/_/agent/v1/files null',
+      '/_/agent/v1/files p2',
+    ]);
+
+    server.state.requests.length = 0;
+    assert.deepEqual(await adapter.listAllFiles({ path: 'demos/missing' }), []);
+    assert.equal(new URL(server.state.requests.at(-1).url, 'http://localhost').pathname, '/_/agent/v1/files');
+  });
+});
+
+test('addDomain posts domain and alsoWww to the site route, and an answer without domain.domain is unknown', async () => {
+  await withServer(async (server) => {
+    server.answer(200, { domain: { domain: 'maya.example' }, changed: true, warnings: [] });
+    const result = await client(server).addDomain('sites', '42', { domain: 'maya.example' });
+    assert.equal(result.domain.domain, 'maya.example');
+
+    const seen = server.state.requests.at(-1);
+    assert.equal(seen.method, 'POST');
+    assert.equal(new URL(seen.url, 'http://localhost').pathname, '/_/agent/v1/sites/42/domains');
+    assert.deepEqual(JSON.parse(seen.body), { domain: 'maya.example', alsoWww: false });
+    assert.equal(seen.headers['if-match'], undefined);
+
+    server.answer(200, { changed: true });
+    await assert.rejects(client(server).addDomain('sites', '42', { domain: 'maya.example' }),
+      (error) => error.code === 'outcome-unknown');
+  });
+});
+
+test('domainStatus reads the domains route of a document', async () => {
+  await withServer(async (server) => {
+    server.answer(200, { domains: [] });
+
+    const result = await client(server).domainStatus('documents', '7');
+    assert.deepEqual(result, { domains: [] });
+
+    const seen = server.state.requests.at(-1);
+    assert.equal(seen.method, 'GET');
+    assert.equal(new URL(seen.url, 'http://localhost').pathname, '/_/agent/v1/documents/7/domains');
+  });
+});
+
+test('a refused not-a-site-folder becomes its code with the new hint', async () => {
+  await withServer(async (server) => {
+    server.answer(409, { error: { code: 'not-a-site-folder', message: 'This folder has no site.json.' } });
+
+    await assert.rejects(client(server).claimSiteSubdomain('42', 'maya'), (error) => {
+      assert.ok(error instanceof ClayError);
+      assert.equal(error.code, 'not-a-site-folder');
+      assert.equal(error.hint, 'A site folder holds its own site.json file. Add one to the folder, then try again.');
+      assert.equal(error.status, 409);
+      return true;
+    });
+  });
+});
+
 test('a 200 answer with no etag is still outcome-unknown on writeData and restore', async () => {
   await withServer(async (server) => {
     server.answer(200, { changed: true });
@@ -498,4 +689,55 @@ test('a host that never answers is host-unavailable on a read and outcome-unknow
     silent.closeAllConnections();
     await new Promise((resolve) => silent.close(resolve));
   }
+});
+
+test('a site path is found once through /sites and claimed through the site route', async () => {
+  await withServer(async (server) => {
+    const adapter = hyperclayAdapter(client(server));
+
+    const located = await adapter.locateSite({ site: 'demos/maya' });
+    const again = await adapter.locateSite({ site: '/demos/maya/' });
+    const claimed = await adapter.claimSiteSubdomain(located.id, 'maya');
+
+    assert.deepEqual(located, { id: '42', ref: 'hyperclay:42' });
+    assert.deepEqual(again, located);
+    assert.equal(claimed.subdomain, 'maya');
+    const paths = server.state.requests.map((seen) => `${seen.method} ${new URL(seen.url, 'http://localhost').pathname}`);
+    assert.deepEqual(paths, [
+      'GET /_/agent/v1/whoami',
+      'GET /_/agent/v1/sites',
+      'POST /_/agent/v1/sites/42/subdomain',
+    ]);
+  });
+});
+
+test('a server without the feature is refused before any write', async () => {
+  await withServer(async (server) => {
+    server.state.features = [];
+    const adapter = hyperclayAdapter(client(server));
+
+    await assert.rejects(adapter.claimSiteSubdomain('42', 'maya'), (error) => error.code === 'not-supported');
+    assert.ok(!server.state.requests.some((seen) => seen.method === 'POST'));
+  });
+});
+
+test('an unknown site path is not-found with the list_sites hint', async () => {
+  await withServer(async (server) => {
+    const adapter = hyperclayAdapter(client(server));
+
+    await assert.rejects(adapter.locateSite({ site: 'demos/other' }), (error) => {
+      assert.equal(error.code, 'not-found');
+      assert.match(error.hint, /list_sites/);
+      return true;
+    });
+  });
+});
+
+test('a folder id makes no /sites request', async () => {
+  await withServer(async (server) => {
+    const adapter = hyperclayAdapter(client(server));
+
+    assert.deepEqual(await adapter.locateSite({ site: 'hyperclay:42' }), { id: '42', ref: 'hyperclay:42' });
+    assert.deepEqual(server.state.requests, []);
+  });
 });

@@ -1,8 +1,11 @@
+import path from 'node:path';
+
 import { ClayError } from './errors.js';
 import { applyEdits } from './html/edit.js';
 import { find } from './html/find.js';
 import { outline } from './html/outline.js';
 import { range as sliceRange, select as selectMatches } from './html/select.js';
+import { planPublish, readLocal, runPublish, walkFolder } from './publish.js';
 import { createSession } from './session.js';
 
 const KEY_PATTERN = /hcak_[0-9a-f]{64}/;
@@ -58,22 +61,54 @@ function shapeRead({ ref, host, etag, html, maxChars, input }) {
   };
 }
 
-export function createActions({ adapters, resolve, session = createSession(), readOnly = false, explicitEtag = false }) {
+export function createActions({ adapters, resolve, session = createSession(), readOnly = false, explicitEtag = false, cwd = process.cwd() }) {
   function refuseReadOnly() {
     if (readOnly) throw new ClayError('read-only-mode', 'This server was started read-only.');
   }
 
-  async function targetFor(input) {
-    const target = await resolve(input.document, { host: input.host });
-    const host = target.host;
+  function adapterFor(host) {
     const adapter = adapters[host];
     if (!adapter) {
       throw new ClayError('host-unavailable', `No adapter is available for ${host}.`, {
         hint: 'This build talks to hyperclay.com; other hosts are not connected yet.',
       });
     }
+    return adapter;
+  }
+
+  async function targetFor(input) {
+    const target = await resolve(input.document, { host: input.host });
+    const adapter = adapterFor(target.host);
     const { id, ref } = await adapter.locate(target);
-    return { host, adapter, id, ref };
+    return { host: target.host, adapter, id, ref };
+  }
+
+  function given(value) {
+    return value !== undefined && value !== null && value !== '';
+  }
+
+  // A document, or a site folder: a folder in a hyperclay.com account that holds its own site.json.
+  async function nodeFor(input) {
+    if (given(input.document) === given(input.site)) {
+      throw new ClayError('invalid-argument', 'Pass either `document` or `site`, not both.', {
+        hint: 'Use `site` for a folder such as demos/maya, and `document` for one page.',
+      });
+    }
+    if (given(input.document)) return { ...(await targetFor(input)), kind: 'documents' };
+    const host = input.host ?? 'hyperclay';
+    const adapter = adapterFor(host);
+    if (!adapter.locateSite) {
+      throw new ClayError('host-unavailable', 'Sites live on hyperclay.com only.');
+    }
+    const { id, ref } = await adapter.locateSite({ site: input.site, account: input.account });
+    return { host, adapter, id, ref, kind: 'sites' };
+  }
+
+  function hyperclayAdapterFor(input, method) {
+    const host = input.host ?? 'hyperclay';
+    const adapter = adapterFor(host);
+    if (!adapter[method]) throw new ClayError('host-unavailable', 'This lives on hyperclay.com only.');
+    return { host, adapter };
   }
 
   async function load(input) {
@@ -125,13 +160,7 @@ export function createActions({ adapters, resolve, session = createSession(), re
   return {
     list_documents(input = {}) {
       const host = input.host ?? 'hyperclay';
-      const adapter = adapters[host];
-      if (!adapter) {
-        throw new ClayError('host-unavailable', `No adapter is available for ${host}.`, {
-          hint: 'This build talks to hyperclay.com; other hosts are not connected yet.',
-        });
-      }
-      return adapter.list({ where: input.where, cursor: input.cursor });
+      return adapterFor(host).list({ where: input.where, cursor: input.cursor });
     },
 
     async read_document(input = {}) {
@@ -287,9 +316,88 @@ export function createActions({ adapters, resolve, session = createSession(), re
 
     async claim_subdomain(input = {}) {
       refuseReadOnly();
-      const { host, adapter, id, ref } = await targetFor(input);
-      const result = await adapter.claimSubdomain(id, input.subdomain);
+      const { host, adapter, id, ref, kind } = await nodeFor(input);
+      const result = kind === 'sites'
+        ? await adapter.claimSiteSubdomain(id, input.subdomain)
+        : await adapter.claimSubdomain(id, input.subdomain);
       return { ref, host, subdomain: result.subdomain, url: result.url, changed: result.changed, warnings: result.warnings ?? [] };
+    },
+
+    async list_sites(input = {}) {
+      const { adapter } = hyperclayAdapterFor(input, 'listSites');
+      return adapter.listSites({ account: input.account, cursor: input.cursor });
+    },
+
+    async list_files(input = {}) {
+      const { adapter } = hyperclayAdapterFor(input, 'listFiles');
+      return adapter.listFiles({ account: input.account, path: input.path ?? '', cursor: input.cursor });
+    },
+
+    async add_domain(input = {}) {
+      refuseReadOnly();
+      const { host, adapter, id, ref, kind } = await nodeFor(input);
+      const result = await adapter.addDomain(kind, id, { domain: input.domain, alsoWww: input.alsoWww === true });
+      return { ref, host, domain: result.domain, changed: result.changed, warnings: result.warnings ?? [] };
+    },
+
+    async domain_status(input = {}) {
+      const { host, adapter, id, ref, kind } = await nodeFor(input);
+      const result = await adapter.domainStatus(kind, id);
+      return { ref, host, domains: result.domains ?? [] };
+    },
+    async publish_site(input = {}) {
+      refuseReadOnly();
+      const { host, adapter } = hyperclayAdapterFor(input, 'putFile');
+      const to = String(input.to ?? '').replace(/^\/+|\/+$/g, '');
+      if (!to || to.split('/').some((segment) => !segment || segment === '.' || segment === '..')) {
+        throw new ClayError('invalid-argument', 'Name the folder in your account to publish to, such as demos/maya.');
+      }
+      const root = path.resolve(cwd, String(input.folder ?? ''));
+      const { files, skipped } = await walkFolder(root);
+      const { local, refused: refusedLocally } = await readLocal(files, to);
+      const remoteFiles = await adapter.listAllFiles({ account: input.account, path: to });
+      const plan = planPublish({ local, remote: remoteFiles, to });
+      const refused = [...refusedLocally, ...plan.refused];
+      const summary = {
+        host,
+        to,
+        dryRun: input.dryRun === true,
+        create: plan.steps.filter((step) => step.action === 'create').map((step) => step.path),
+        replace: plan.steps.filter((step) => step.action === 'replace').map((step) => step.path),
+        unchanged: plan.steps.filter((step) => step.action === 'unchanged').map((step) => step.path),
+        remoteOnly: plan.remoteOnly,
+        skipped,
+        refused,
+      };
+      if (input.dryRun === true) return summary;
+      const result = await runPublish({
+        plan,
+        to,
+        subdomain: input.subdomain ?? null,
+        refused,
+        remote: {
+          putFile: (filePath, bytes, options) => adapter.putFile(filePath, bytes, { ...options, account: input.account }),
+          listAllFiles: (folderPath) => adapter.listAllFiles({ account: input.account, path: folderPath }),
+          claimSubdomain: async (sitePath, name) => {
+            const { id } = await adapter.locateSite({ site: sitePath, account: input.account });
+            return adapter.claimSiteSubdomain(id, name);
+          },
+        },
+      });
+      return {
+        host,
+        to,
+        dryRun: false,
+        created: result.created,
+        replaced: result.replaced,
+        unchanged: result.unchanged,
+        failed: result.failed,
+        pending: result.pending,
+        remoteOnly: plan.remoteOnly,
+        skipped,
+        refused,
+        subdomain: result.subdomain,
+      };
     },
   };
 }

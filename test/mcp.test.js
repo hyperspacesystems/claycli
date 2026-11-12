@@ -96,6 +96,27 @@ function fakeAdapter({ html = ORIGINAL } = {}) {
       state.subdomain = subdomain;
       return { subdomain, url: `https://${subdomain}.hyperclay.com`, changed: true, warnings: [] };
     },
+    async locateSite({ site }) {
+      if (site !== 'demos/maya') throw new ClayError('not-found', 'No site folder there that this key can reach.');
+      return { id: '42', ref: 'hyperclay:42' };
+    },
+    async claimSiteSubdomain(id, subdomain) {
+      state.siteSubdomain = { id, subdomain };
+      return { subdomain, url: `https://${subdomain}.hyperclay.com`, changed: true, warnings: [] };
+    },
+    async listSites() {
+      return { sites: [{ id: '42', ref: 'hyperclay:42', path: 'demos/maya' }], nextCursor: null };
+    },
+    async listFiles({ path }) {
+      return { account: 'ann', path, files: [], nextCursor: null };
+    },
+    async addDomain(kind, id, { domain, alsoWww }) {
+      state.domain = { kind, id, domain, alsoWww };
+      return { domain: { id: 5, domain, status: 'pending', dnsRecords: [] }, changed: true, warnings: [] };
+    },
+    async domainStatus(kind, id) {
+      return { domains: [{ id: 5, domain: 'maya.example', status: 'pending' }] };
+    },
   };
 
   return { state, adapter };
@@ -136,6 +157,9 @@ const READ_TOOLS = [
   'read_data',
   'list_versions',
   'read_version',
+  'list_sites',
+  'list_files',
+  'domain_status',
 ];
 
 const ANNOTATIONS = {
@@ -151,15 +175,20 @@ const ANNOTATIONS = {
   save_document: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   restore_version: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   claim_subdomain: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+  list_sites: { readOnlyHint: true, openWorldHint: false },
+  list_files: { readOnlyHint: true, openWorldHint: false },
+  domain_status: { readOnlyHint: true, openWorldHint: false },
+  add_domain: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+  publish_site: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
 };
 
-test('the server lists twelve tools with their annotations', async () => {
+test('the server lists seventeen tools with their annotations', async () => {
   const { actions } = actionsFor();
   const session = await connect({ actions });
   try {
     const { tools } = await session.client.listTools();
 
-    assert.equal(tools.length, 12);
+    assert.equal(tools.length, 17);
     assert.deepEqual(tools.map((tool) => tool.name).sort(), Object.keys(ANNOTATIONS).sort());
     for (const tool of tools) {
       assert.deepEqual(tool.annotations, ANNOTATIONS[tool.name], tool.name);
@@ -171,7 +200,7 @@ test('the server lists twelve tools with their annotations', async () => {
   }
 });
 
-test('read-only registers exactly the seven read tools', async () => {
+test('read-only registers exactly the ten read tools', async () => {
   const { actions } = actionsFor({ readOnly: true });
   const session = await connect({ actions, readOnly: true });
   try {
@@ -204,6 +233,19 @@ test('claim_subdomain gives the document its address through the MCP client', as
     assert.deepEqual(JSON.parse(claimed.content[0].text), claimed.structuredContent);
     assert.equal(fake.state.subdomain, 'my-tool');
     assert.equal(fake.state.etag, 'E1');
+  } finally {
+    await session.close();
+  }
+});
+
+test('claim_subdomain claims a site folder through the MCP client', async () => {
+  const { actions } = actionsFor();
+  const session = await connect({ actions });
+  try {
+    const claimed = await session.client.callTool({ name: 'claim_subdomain', arguments: { site: 'demos/maya', subdomain: 'maya' } });
+    assert.equal(claimed.isError, undefined);
+    assert.equal(claimed.structuredContent.ref, 'hyperclay:42');
+    assert.equal(claimed.structuredContent.subdomain, 'maya');
   } finally {
     await session.close();
   }

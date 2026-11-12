@@ -1,14 +1,14 @@
 # @panphora/clay-agent
 
-Let AI agents read and edit [Hyperclay](https://hyperclay.com) HTML files, from the command line or as an MCP server for Claude Code, Claude Desktop and Cursor.
+Let AI agents read and edit [Hyperclay](https://hyperclay.com) HTML files and publish sites, from the command line or as an MCP server for Claude Code, Claude Desktop and Cursor.
 
 > Works with hyperclay.com. Support for the HTML Clay and Hyperclay Local desktop apps comes in a later version.
 
 ## How it works
 
-You make an **agent key** in the Hyperclay dashboard (account menu, **Agent keys…**; see [the docs](https://hyperclay.com/docs/agents/)): a named key that can be limited to one team or folder, and to reading, changing content, or full editing. You can revoke it at any time. The agent acts as you, with no more access than you have, and every change it makes to a document is kept in the document's version history as "Recorded by you through <key name>", so any change can be restored.
+You make an **agent key** in the Hyperclay dashboard (account menu, **Agent keys…**; see [the docs](https://hyperclay.com/docs/agents/)): a named key that can be limited to one team or folder, and to reading, changing content, or full editing. You can revoke it at any time, and **Recent activity** in the Agent keys dialog shows what each key changed. The agent acts as you, with no more access than you have, and every change it makes to a document is kept in the document's version history as "Recorded by you through <key name>", so any change can be restored.
 
-Every change to a document's content is based on the version the agent read. If the document changed in the meantime, the write is refused and the agent is told to read it again. Nothing is merged or overwritten silently.
+With full editing, a key can also create and replace files and folders (pages, images, CSS and `site.json`), publish a local folder as a site, claim subdomains for documents and site folders, and add custom domains and read their status and DNS records. Every change to a document or file is based on the version the agent read: if it changed in the meantime, the write is refused and the agent is told to read it again, and a replaced file's old bytes are kept as a backup. Agents cannot delete, rename, move or share anything, cannot make a private page public, cannot remove a custom domain, and cannot change a subdomain once it is set.
 
 ## Sign in
 
@@ -58,7 +58,12 @@ Options: `mcp --read-only` offers only the reading tools.
 | `edit_document` | Replace exact text in the version read; each match must be unique |
 | `save_document` | Save a whole document |
 | `list_versions`, `read_version`, `restore_version` | Version history |
-| `claim_subdomain` | Give a document its public address at `<name>.hyperclay.com`. Version history can't undo it, and a different name takes the dashboard |
+| `claim_subdomain` | Give a document or a site folder its public address at `<name>.hyperclay.com`. Version history can't undo it, and a different name takes the dashboard |
+| `list_sites` | Site folders the key can reach (each a folder holding its own `site.json`), with each one's address, home page and page count |
+| `list_files` | Folders, documents and files under a folder, with an etag for each |
+| `add_domain` | Add a custom domain to a document or a site folder and answer the two DNS records to set. Agents can never remove a domain |
+| `domain_status` | Each custom domain on a document or a site folder, whether it is active, and the DNS records it needs |
+| `publish_site` | Upload a local folder as a site. Sends only what changed, never deletes files that exist only on hyperclay.com (lists them as `remoteOnly`), and claims the subdomain last |
 
 Large documents (up to 5 MB) are read in pieces: an outline first, then the parts the agent needs, and small changes go through `edit_document`.
 
@@ -71,9 +76,21 @@ clay-agent read hyperclay:123 --select 'main > section'
 clay-agent edit hyperclay:123 --find 'Draft' --replace 'Final' --if-match <etag>
 clay-agent versions hyperclay:123
 clay-agent subdomain hyperclay:123 my-tool
+clay-agent subdomain (<document> | --site <site>) <name> [--account <name>]
+clay-agent sites [--account <name>] [--cursor <id>]
+clay-agent files <path> [--account <name>] [--cursor <id>]
+clay-agent domain add (<document> | --site <site>) <domain> [--also-www]
+clay-agent domain status (<document> | --site <site>)
+clay-agent publish <folder> <account folder> [--subdomain <name>] [--account <name>] [--dry-run]
 ```
 
-A document is `hyperclay:<id>` or its hyperclay.com URL. Content changes need `--if-match` with the etag from a read. Add `--json` to any command for machine-readable output.
+Preview a site publish before sending anything, then run it again without `--dry-run`:
+
+```bash
+npx -y @panphora/clay-agent publish ./maya demos/maya --subdomain maya --dry-run
+```
+
+A document is `hyperclay:<id>` or its hyperclay.com URL. A site folder (a folder holding its own `site.json`) is its path in your account such as `demos/maya`, its address, or `hyperclay:<folder id>`. Content changes need `--if-match` with the etag from a read. `publish` sends only what changed, never deletes files that exist only on hyperclay.com, and claims the subdomain last. Add `--json` to any command for machine-readable output.
 
 Exit codes: `0` done, `1` refused or failed, `2` the document changed since it was read (the current etag is printed), `3` the host is not reachable, `4` not signed in, or the key is malformed, revoked or expired, `5` the host may or may not have saved the write (read the document before trying again).
 

@@ -16,6 +16,15 @@ const HINTS = {
   'name-in-use': 'Choose another name.',
   'subdomain-already-set': 'Change a subdomain in the dashboard.',
   'subdomain-limit-reached': 'Your subdomain limit grows each month.',
+  'not-a-site-folder': 'A site folder holds its own site.json file. Add one to the folder, then try again.',
+  'not-supported': 'This hyperclay.com server is older than this clay-agent. Use the dashboard for this for now.',
+  'wildcard-not-allowed': 'Add a wildcard domain in the dashboard.',
+  'domain-already-added': 'This domain is on another of your documents or sites. Remove it there in the dashboard first.',
+  'domain-in-use': 'Another account uses this domain, or a name that overlaps it.',
+  'already-exists': 'Something is already at that path. List the folder and replace it with its etag.',
+  'secret-in-content': 'Remove the agent key from the file, then try again.',
+  managed: 'This place belongs to a collection or to one document. Write somewhere else.',
+  'path-conflict': 'A file and a folder cannot share one name. Rename one of them.',
 };
 
 export function hyperclayClient({ base, getKey, fetchImpl = fetch, timeoutMs = 30000 } = {}) {
@@ -52,7 +61,7 @@ export function hyperclayClient({ base, getKey, fetchImpl = fetch, timeoutMs = 3
     return code === 'ECONNREFUSED' || code === 'ENOTFOUND' || code === 'EAI_AGAIN' || code === 'ENETUNREACH';
   }
 
-  async function request(pathname, { method = 'GET', query = null, body, etag, ifNoneMatch, noEtag = false } = {}) {
+  async function request(pathname, { method = 'GET', query = null, body, raw, headers: extra = {}, etag, ifNoneMatch, noEtag = false } = {}) {
     const key = getKey ? await getKey() : null;
     if (!key) {
       throw new ClayError('key-missing', 'Not signed in to hyperclay.com.', { hint: KEY_HINT });
@@ -73,15 +82,17 @@ export function hyperclayClient({ base, getKey, fetchImpl = fetch, timeoutMs = 3
       Accept: 'application/json',
     };
     if (body !== undefined) headers['Content-Type'] = 'application/json';
+    if (raw !== undefined) headers['Content-Type'] = 'application/octet-stream';
     if (etag) headers['If-Match'] = etag;
     if (ifNoneMatch) headers['If-None-Match'] = ifNoneMatch;
+    Object.assign(headers, extra);
 
     let response;
     try {
       response = await fetchImpl(url, {
         method,
         headers,
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body: raw !== undefined ? raw : body === undefined ? undefined : JSON.stringify(body),
         redirect: 'error',
         signal: AbortSignal.timeout(timeoutMs),
       });
@@ -164,6 +175,23 @@ export function hyperclayClient({ base, getKey, fetchImpl = fetch, timeoutMs = 3
     });
   }
 
+  let offered = null;
+  async function features() {
+    offered ??= request('/whoami').then((answer) => (Array.isArray(answer?.features) ? answer.features : []));
+    try {
+      return await offered;
+    } catch (error) {
+      offered = null;
+      throw error;
+    }
+  }
+
+  async function etagFreeWrite(pathname, body, check) {
+    const answer = await request(pathname, { method: 'POST', body, noEtag: true });
+    if (!check(answer)) throw lostOutcome();
+    return answer;
+  }
+
   return {
     list({ account, url, cursor, limit } = {}) {
       return request('/documents', { query: { account, url, cursor, limit } });
@@ -211,10 +239,45 @@ export function hyperclayClient({ base, getKey, fetchImpl = fetch, timeoutMs = 3
       );
     },
 
-    async claimSubdomain(id, subdomain) {
-      const claimed = await request(`/documents/${encodeURIComponent(id)}/subdomain`, { method: 'POST', body: { subdomain }, noEtag: true });
-      if (typeof claimed?.subdomain !== 'string') throw lostOutcome();
-      return claimed;
+    claimSubdomain(id, subdomain) {
+      return etagFreeWrite(`/documents/${encodeURIComponent(id)}/subdomain`, { subdomain },
+        (answer) => typeof answer?.subdomain === 'string');
+    },
+
+    features,
+
+    listSites({ account, path, url, cursor } = {}) {
+      return request('/sites', { query: { account, path, url, cursor } });
+    },
+
+    claimSiteSubdomain(id, subdomain) {
+      return etagFreeWrite(`/sites/${encodeURIComponent(id)}/subdomain`, { subdomain },
+        (answer) => typeof answer?.subdomain === 'string');
+    },
+
+    listFiles({ account, path, cursor } = {}) {
+      return request('/files', { query: { account, path, cursor } });
+    },
+
+    async putFile(filePath, bytes, { account, create = false, etag } = {}) {
+      if (!create) requireEtag('Replacing a file', etag);
+      return request('/files', {
+        method: 'PUT',
+        query: { account, path: filePath },
+        raw: bytes,
+        headers: { 'X-Operation-Id': randomUUID() },
+        etag: create ? undefined : etag,
+        ifNoneMatch: create ? '*' : undefined,
+      });
+    },
+
+    addDomain(kind, id, { domain, alsoWww = false } = {}) {
+      return etagFreeWrite(`/${kind}/${encodeURIComponent(id)}/domains`, { domain, alsoWww },
+        (answer) => typeof answer?.domain?.domain === 'string');
+    },
+
+    domainStatus(kind, id) {
+      return request(`/${kind}/${encodeURIComponent(id)}/domains`);
     },
   };
 }

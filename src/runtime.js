@@ -42,5 +42,5 @@ export async function buildActions({
     return target;
   }
 
-  return createActions({ adapters, resolve, readOnly, explicitEtag });
+  return createActions({ adapters, resolve, readOnly, explicitEtag, cwd });
 }
