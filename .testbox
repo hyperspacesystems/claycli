@@ -4,5 +4,7 @@ TESTBOX_REPO=clay-agent
 # npmrelease runs this box instead of the local suite, and publishes with --ignore-scripts.
 TESTBOX_RELEASE=1
 TESTBOX_SETUP='npm ci --no-audit --no-fund'
-TESTBOX_COMMAND='npm test'
+# The lanes of `npm test`, each reported in test-box-out/<run>/release-checks.json, which
+# hypersave's release lane requires when TESTBOX_RELEASE=1 (scripts/release-checks.mjs).
+TESTBOX_COMMAND='node scripts/release-checks.mjs --script test --gate-first'
 TESTBOX_TIMEOUT=${TESTBOX_TIMEOUT:-20m}
