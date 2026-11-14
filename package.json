@@ -1,6 +1,6 @@
 {
   "name": "@panphora/clay-agent",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Let AI agents read and edit HTML files on hyperclay.com from the command line or as an MCP server",
   "type": "module",
   "bin": {

@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.6.0] - 2026-11-14
+
+### Added
+- HTML Clay documents can be read through the local agent lane. Served folder addresses resolve to the files they point at.
+- Data in HTML Clay documents can be saved, restored and written. Each change keeps a single operation id while its outcome is unknown.
+
+### Changed
+- HTML Clay's served folders and agent token are now found in its own config folder, not in a Hyperclay Local file.
+
 ## [0.5.1] - 2026-11-14
 
 ### Added
