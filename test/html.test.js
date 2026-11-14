@@ -343,6 +343,34 @@ test('select shares one maxChars budget across every match', () => {
   }
 });
 
+test('a regex worker cap refuses a fifth search until one of four finishes', async () => {
+  const html = `${'x'.repeat(40)}y`;
+  const slow = () =>
+    find(html, { regex: '^(x+)+$', limit: 5, workerLimit: 4 }).then(
+      () => null,
+      (error) => error,
+    );
+
+  const running = [slow(), slow(), slow(), slow()];
+  await new Promise((resolve) => setTimeout(resolve, 100));
+
+  await assert.rejects(
+    () => find(html, { regex: 'x', workerLimit: 4 }),
+    (error) => {
+      assert.equal(error.code, 'busy');
+      assert.equal(error.message, 'Too many searches are running. Try again in a few seconds.');
+      assert.equal(error.hint, 'Search with text instead of regex, or retry shortly.');
+      return true;
+    },
+  );
+
+  const finished = await Promise.all(running);
+  for (const error of finished) assert.equal(error?.code, 'find-timeout');
+
+  const after = await find('<p>abc</p>', { regex: 'b', workerLimit: 4 });
+  assert.equal(after.count, 1);
+});
+
 test('a find snippet keeps the real newline so it can be pasted into an edit', async () => {
   const html = '<html><body><p>first line\nsecond line</p></body></html>';
   const result = await find(html, { text: 'first line\nsecond line' });

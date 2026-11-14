@@ -26,6 +26,7 @@ Usage:
   clay-agent data <document> --write <json|-> --if-match <etag>
   clay-agent edit <document> (--find <text> --replace <text> [--occurrence <n>] | --edits <file.json>) --if-match <etag>
   clay-agent save <document> --file <path|-> --if-match <etag>
+  clay-agent create <path> --file <path|-> [--account <name>]
   clay-agent versions <document> [--before <id>]
   clay-agent version <document> <version-id> [--select <css>] [--range <start:length>]
   clay-agent restore <document> <version-id> --if-match <etag>
@@ -183,6 +184,7 @@ const COMMAND_USAGE = {
   data: 'Usage: clay-agent data <document> [--write <json|-> --if-match <etag>]',
   edit: 'Usage: clay-agent edit <document> (--find <text> --replace <text> [--occurrence <n>] | --edits <file.json>) --if-match <etag>',
   save: 'Usage: clay-agent save <document> --file <path|-> --if-match <etag>',
+  create: 'Usage: clay-agent create <path> --file <path|-> [--account <name>]',
   versions: 'Usage: clay-agent versions <document> [--before <id>]',
   version: 'Usage: clay-agent version <document> <version-id> [--select <css>] [--range <start:length>]',
   restore: 'Usage: clay-agent restore <document> <version-id> --if-match <etag>',
@@ -441,6 +443,18 @@ async function saveCommand(argv, context) {
   return 0;
 }
 
+async function createCommand(argv, context) {
+  const usage = COMMAND_USAGE.create;
+  const { flags, positionals } = parseCommandArgv(argv, usage);
+  requirePositionals(positionals, 1, usage);
+  if (flags.file === undefined) throw usageFailure(usage);
+  const actions = await buildForDocument(context, flags);
+  const input = { path: positionals[0], html: await readInput(flags.file, context) };
+  if (flags.account !== undefined) input.account = flags.account;
+  printResult(await actions.create_document(input), flags, context);
+  return 0;
+}
+
 async function versionsCommand(argv, context) {
   const usage = COMMAND_USAGE.versions;
   const { flags, positionals } = parseCommandArgv(argv, usage);
@@ -577,6 +591,7 @@ async function dispatch(argv, context) {
   if (command === 'data') return dataCommand(rest, context);
   if (command === 'edit') return editCommand(rest, context);
   if (command === 'save') return saveCommand(rest, context);
+  if (command === 'create') return createCommand(rest, context);
   if (command === 'versions') return versionsCommand(rest, context);
   if (command === 'version') return versionCommand(rest, context);
   if (command === 'restore') return restoreCommand(rest, context);

@@ -7,10 +7,10 @@ function invalid(message, hint) {
   return new ClayError('invalid-edits', message, { hint });
 }
 
-function locate(html, needle) {
+function locate(html, needle, limit = Infinity) {
   const offsets = [];
   let from = 0;
-  for (;;) {
+  while (offsets.length < limit) {
     const start = html.indexOf(needle, from);
     if (start === -1) break;
     offsets.push(start);
@@ -42,12 +42,13 @@ function checkShape(edits) {
   }
 }
 
-export function applyEdits(html, edits) {
+export function applyEdits(html, edits, { scanLimit = false } = {}) {
   checkShape(edits);
   const planned = [];
   for (let index = 0; index < edits.length; index += 1) {
     const edit = edits[index];
-    const offsets = locate(html, edit.find);
+    const limit = scanLimit ? (edit.occurrence ?? 1) + 1 : Infinity;
+    const offsets = locate(html, edit.find, limit);
     if (offsets.length === 0) {
       throw new ClayError('edit-not-found', `Edit ${index + 1} did not match any text.`, {
         hint: 'Read the document again and copy the text exactly, including whitespace.',
@@ -57,12 +58,15 @@ export function applyEdits(html, edits) {
     let offset;
     if (edit.occurrence === undefined) {
       if (offsets.length > 1) {
+        const counted = scanLimit && offsets.length >= limit
+          ? { count: offsets.length, atLeast: true }
+          : { count: offsets.length };
         throw new ClayError(
           'edit-not-unique',
-          `Edit ${index + 1} matches ${offsets.length} places, so it is ambiguous.`,
+          `Edit ${index + 1} matches ${counted.atLeast ? 'at least ' : ''}${offsets.length} places, so it is ambiguous.`,
           {
             hint: 'Add surrounding text to `find` so it is unique, or pass `occurrence` to pick one.',
-            details: { index, count: offsets.length, offsets: offsets.slice(0, OFFSET_SAMPLE) },
+            details: { index, ...counted, offsets: offsets.slice(0, OFFSET_SAMPLE) },
           },
         );
       }

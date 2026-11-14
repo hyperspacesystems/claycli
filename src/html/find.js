@@ -74,33 +74,44 @@ function literalMatches(html, text, onMatch) {
 }
 
 const REGEX_DEADLINE_MS = 2000;
+let runningRegexWorkers = 0;
 
-function regexRanges(html, source, max) {
-  return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL('./regex-worker.js', import.meta.url), {
-      workerData: { html, source, max },
+async function regexRanges(html, source, max, workerLimit = Infinity) {
+  if (runningRegexWorkers >= workerLimit) {
+    throw new ClayError('busy', 'Too many searches are running. Try again in a few seconds.', {
+      hint: 'Search with text instead of regex, or retry shortly.',
     });
-    const timer = setTimeout(() => {
-      worker.terminate();
-      reject(
-        new ClayError('find-timeout', 'That regular expression took too long on this document.', {
-          hint: 'Use a simpler pattern, or pass `text` for a literal search.',
-        }),
-      );
-    }, REGEX_DEADLINE_MS);
-    worker.once('message', (result) => {
-      clearTimeout(timer);
-      worker.terminate();
-      resolve(result);
+  }
+  runningRegexWorkers += 1;
+  try {
+    return await new Promise((resolve, reject) => {
+      const worker = new Worker(new URL('./regex-worker.js', import.meta.url), {
+        workerData: { html, source, max },
+      });
+      const timer = setTimeout(() => {
+        worker.terminate();
+        reject(
+          new ClayError('find-timeout', 'That regular expression took too long on this document.', {
+            hint: 'Use a simpler pattern, or pass `text` for a literal search.',
+          }),
+        );
+      }, REGEX_DEADLINE_MS);
+      worker.once('message', (result) => {
+        clearTimeout(timer);
+        worker.terminate();
+        resolve(result);
+      });
+      worker.once('error', () => {
+        clearTimeout(timer);
+        reject(new ClayError('internal', 'The regular expression search failed.'));
+      });
     });
-    worker.once('error', () => {
-      clearTimeout(timer);
-      reject(new ClayError('internal', 'The regular expression search failed.'));
-    });
-  });
+  } finally {
+    runningRegexWorkers -= 1;
+  }
 }
 
-export async function find(html, { text, regex, limit = 20 } = {}) {
+export async function find(html, { text, regex, limit = 20, parseLimit = Infinity, workerLimit = Infinity } = {}) {
   const hasText = text !== undefined && text !== null;
   const hasRegex = regex !== undefined && regex !== null;
   if (hasText === hasRegex) {
@@ -135,9 +146,20 @@ export async function find(html, { text, regex, limit = 20 } = {}) {
         hint: 'Pass a JavaScript regular expression source string, such as `id="[0-9]+"`.',
       });
     }
-    const result = await regexRanges(html, regex, max);
+    const result = await regexRanges(html, regex, max, workerLimit);
     count = result.count;
     ranges = result.ranges;
+  }
+  if (hasText && html.length > parseLimit) {
+    const starts = lineStarts(html);
+    const matches = ranges.map(({ start, end }) => ({
+      start,
+      end,
+      line: lineAt(starts, start),
+      path: null,
+      snippet: snippet(html, start, end),
+    }));
+    return { count, matches, elementPaths: false };
   }
   if (count === 0) return { count, matches: [] };
   const { $ } = parse(html);

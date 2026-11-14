@@ -12,6 +12,9 @@ const KEY_PATTERN = /hcak_[0-9a-f]{64}/;
 const TOO_LARGE_HINT =
   'Use outline_document to see its structure, find_in_document to locate text, or read_document with select or range to read part of it.';
 
+const TOO_LARGE_TO_OUTLINE_HINT =
+  'Too large to outline here. Use find_in_document with text to locate what you need, read_document with range to read part of it, and edit_document to change exact text.';
+
 const CUT_HINT =
   'The answer was cut to stay within maxChars. Read the rest with range, starting at the end offset shown.';
 
@@ -24,13 +27,20 @@ function readFirstHint(explicitEtag) {
     : 'Read the document first (read_document, outline_document, find_in_document or read_data), then write.';
 }
 
-function shapeRead({ ref, host, etag, html, maxChars, input }) {
+function refuseParse(size) {
+  throw new ClayError('too-large-to-parse', `This document is ${size} characters, too large to search or outline here.`, {
+    hint: 'Read it in parts with range (start and length), and change it with edit_document, which finds exact text without parsing.',
+  });
+}
+
+function shapeRead({ ref, host, etag, html, maxChars, parseLimit = Infinity, input }) {
   if (input.select !== undefined && input.select !== null) {
     if (input.range !== undefined && input.range !== null) {
       throw new ClayError('invalid-read', 'Pass either `select` or `range`, not both.', {
         hint: 'Use `select` for elements by CSS selector, or `range` for a start and length.',
       });
     }
+    if (html.length > parseLimit) refuseParse(html.length);
     const { count, matches } = selectMatches(html, input.select, { maxChars });
     const answer = { ref, host, etag, size: html.length, count, matches };
     if (matches.some((match) => match.truncated)) answer.hint = CUT_HINT;
@@ -50,18 +60,13 @@ function shapeRead({ ref, host, etag, html, maxChars, input }) {
   if (html.length <= maxChars) {
     return { ref, host, etag, size: html.length, html };
   }
-  return {
-    ref,
-    host,
-    etag,
-    size: html.length,
-    tooLarge: true,
-    outline: outline(html, { depth: 3 }).outline,
-    hint: TOO_LARGE_HINT,
-  };
+  const answer = { ref, host, etag, size: html.length, tooLarge: true };
+  if (html.length <= parseLimit) answer.outline = outline(html, { depth: 3 }).outline;
+  answer.hint = html.length > parseLimit ? TOO_LARGE_TO_OUTLINE_HINT : TOO_LARGE_HINT;
+  return answer;
 }
 
-export function createActions({ adapters, resolve, session = createSession(), readOnly = false, explicitEtag = false, cwd = process.cwd() }) {
+export function createActions({ adapters, resolve, session = createSession(), readOnly = false, explicitEtag = false, cwd = process.cwd(), parseLimit = Infinity, editScanLimit = false, regexWorkers = Infinity }) {
   function refuseReadOnly() {
     if (readOnly) throw new ClayError('read-only-mode', 'This server was started read-only.');
   }
@@ -172,6 +177,7 @@ export function createActions({ adapters, resolve, session = createSession(), re
         etag: loaded.etag,
         html: loaded.html,
         maxChars,
+        parseLimit,
         input,
       });
       session.markSeen(loaded.ref, loaded.etag);
@@ -183,6 +189,7 @@ export function createActions({ adapters, resolve, session = createSession(), re
 
     async outline_document(input = {}) {
       const loaded = await load(input);
+      if (loaded.html.length > parseLimit) refuseParse(loaded.html.length);
       const result = outline(loaded.html, { depth: input.depth ?? 4, select: input.select ?? null });
       session.markSeen(loaded.ref, loaded.etag);
       const answer = {
@@ -202,13 +209,19 @@ export function createActions({ adapters, resolve, session = createSession(), re
 
     async find_in_document(input = {}) {
       const loaded = await load(input);
-      const { count, matches } = await find(loaded.html, {
+      const hasRegex = input.regex !== undefined && input.regex !== null;
+      if (loaded.html.length > parseLimit && hasRegex) refuseParse(loaded.html.length);
+      const { count, matches, elementPaths } = await find(loaded.html, {
         text: input.text,
         regex: input.regex,
         limit: input.limit ?? 20,
+        parseLimit,
+        workerLimit: regexWorkers,
       });
       session.markSeen(loaded.ref, loaded.etag);
-      return { ref: loaded.ref, host: loaded.host, etag: loaded.etag, count, matches };
+      const answer = { ref: loaded.ref, host: loaded.host, etag: loaded.etag, count, matches };
+      if (elementPaths === false) answer.elementPaths = false;
+      return answer;
     },
 
     async read_data(input = {}) {
@@ -247,7 +260,7 @@ export function createActions({ adapters, resolve, session = createSession(), re
         }
         base = loaded.html;
       }
-      const { html } = applyEdits(base, input.edits);
+      const { html } = applyEdits(base, input.edits, { scanLimit: editScanLimit });
       refuseSecret(html);
       const result = await adapter.save(id, { html, etag });
       afterWrite(ref, result.etag);
@@ -296,6 +309,7 @@ export function createActions({ adapters, resolve, session = createSession(), re
         etag: version.etag,
         html: version.html,
         maxChars,
+        parseLimit,
         input: { select: input.select, range: input.range },
       });
       const { ref: shapedRef, host: shapedHost, etag: shapedEtag, ...rest } = shaped;
@@ -345,6 +359,17 @@ export function createActions({ adapters, resolve, session = createSession(), re
       const result = await adapter.domainStatus(kind, id);
       return { ref, host, domains: result.domains ?? [] };
     },
+    async create_document(input) {
+      refuseReadOnly();
+      const filePath = String(input.path ?? '').trim();
+      if (!/\.(html|htmlclay)$/.test(filePath)) {
+        throw new ClayError('invalid-argument', 'A new document needs a path ending in .html, such as notes/plan.html.');
+      }
+      const { host, adapter } = hyperclayAdapterFor(input, 'putFile');
+      const written = await adapter.putFile(filePath, Buffer.from(String(input.html ?? ''), 'utf8'), { create: true, account: input.account });
+      return { host, ref: `hyperclay:${written.id}`, id: written.id, path: written.path, etag: written.etag, size: written.size, folders: written.folders ?? [] };
+    },
+
     async publish_site(input = {}) {
       refuseReadOnly();
       const { host, adapter } = hyperclayAdapterFor(input, 'putFile');

@@ -57,6 +57,7 @@ Options: `mcp --read-only` offers only the reading tools.
 | `write_data` | Change that data |
 | `edit_document` | Replace exact text in the version read; each match must be unique |
 | `save_document` | Save a whole document |
+| `create_document` | Create a new document at a path, such as `notes/plan.html`. Missing folders are created; refused if anything is already there |
 | `list_versions`, `read_version`, `restore_version` | Version history |
 | `claim_subdomain` | Give a document or a site folder its public address at `<name>.hyperclay.com`. Version history can't undo it, and a different name takes the dashboard |
 | `list_sites` | Site folders the key can reach (each a folder holding its own `site.json`), with each one's address, home page and page count |
@@ -74,6 +75,7 @@ clay-agent list
 clay-agent read hyperclay:123 --outline
 clay-agent read hyperclay:123 --select 'main > section'
 clay-agent edit hyperclay:123 --find 'Draft' --replace 'Final' --if-match <etag>
+clay-agent create notes/plan.html --file ./plan.html
 clay-agent versions hyperclay:123
 clay-agent subdomain hyperclay:123 my-tool
 clay-agent subdomain (<document> | --site <site>) <name> [--account <name>]

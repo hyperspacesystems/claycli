@@ -117,6 +117,19 @@ function fakeAdapter({ html = ORIGINAL } = {}) {
     async domainStatus(kind, id) {
       return { domains: [{ id: 5, domain: 'maya.example', status: 'pending' }] };
     },
+    async putFile(filePath, bytes, options = {}) {
+      state.putFile = { path: filePath, html: bytes.toString('utf8'), options };
+      return {
+        id: 77,
+        path: filePath,
+        kind: 'document',
+        etag: 'F1',
+        size: bytes.length,
+        changed: true,
+        created: true,
+        folders: ['notes'],
+      };
+    },
   };
 
   return { state, adapter };
@@ -173,6 +186,7 @@ const ANNOTATIONS = {
   write_data: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   edit_document: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   save_document: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
+  create_document: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
   restore_version: { readOnlyHint: false, destructiveHint: true, openWorldHint: false },
   claim_subdomain: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
   list_sites: { readOnlyHint: true, openWorldHint: false },
@@ -182,13 +196,13 @@ const ANNOTATIONS = {
   publish_site: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
 };
 
-test('the server lists seventeen tools with their annotations', async () => {
+test('the server lists eighteen tools with their annotations', async () => {
   const { actions } = actionsFor();
   const session = await connect({ actions });
   try {
     const { tools } = await session.client.listTools();
 
-    assert.equal(tools.length, 17);
+    assert.equal(tools.length, 18);
     assert.deepEqual(tools.map((tool) => tool.name).sort(), Object.keys(ANNOTATIONS).sort());
     for (const tool of tools) {
       assert.deepEqual(tool.annotations, ANNOTATIONS[tool.name], tool.name);
@@ -434,5 +448,245 @@ test('read_document refuses a negative maxChars instead of slicing', async () =>
     assert.ok(!JSON.stringify(result).includes(ORIGINAL));
   } finally {
     await session.close();
+  }
+});
+
+test('create_document creates a page through the MCP client', async () => {
+  const { actions, fake } = actionsFor();
+  const session = await connect({ actions });
+  try {
+    const created = await session.client.callTool({
+      name: 'create_document',
+      arguments: { path: 'notes/plan.html', html: '<h1>Plan</h1>' },
+    });
+
+    assert.equal(created.isError, undefined);
+    assert.deepEqual(created.structuredContent, {
+      host: 'hyperclay',
+      ref: 'hyperclay:77',
+      id: 77,
+      path: 'notes/plan.html',
+      etag: 'F1',
+      size: 13,
+      folders: ['notes'],
+    });
+    assert.deepEqual(JSON.parse(created.content[0].text), created.structuredContent);
+    assert.equal(fake.state.putFile.path, 'notes/plan.html');
+    assert.equal(fake.state.putFile.html, '<h1>Plan</h1>');
+    assert.equal(fake.state.putFile.options.create, true);
+  } finally {
+    await session.close();
+  }
+});
+
+test('create_document refuses a path that is not html before any write', async () => {
+  const { actions, fake } = actionsFor();
+  const session = await connect({ actions });
+  try {
+    const created = await session.client.callTool({
+      name: 'create_document',
+      arguments: { path: 'notes/plan.txt', html: '<h1>Plan</h1>' },
+    });
+
+    assert.equal(created.isError, true);
+    assert.equal(created.structuredContent.error.code, 'invalid-argument');
+    assert.equal(JSON.parse(created.content[0].text).error.code, 'invalid-argument');
+    assert.equal(fake.state.putFile, undefined);
+  } finally {
+    await session.close();
+  }
+});
+
+const LARGE_SIZE = 5000;
+
+function largeHtml() {
+  const head = '<!doctype html><html><body><main id="board"><h1>Board</h1><p>needle</p>';
+  const tail = '</main></body></html>';
+  return head + 'x'.repeat(LARGE_SIZE - head.length - tail.length) + tail;
+}
+
+function largeActionsFor(options = {}) {
+  const fake = fakeAdapter({ html: largeHtml() });
+  const resolve = async (document) => ({ host: 'hyperclay', id: '1', ref: 'hyperclay:1' });
+  return { fake, actions: createActions({ adapters: { hyperclay: fake.adapter }, resolve, ...options }) };
+}
+
+test('a parse limit refuses outline, find and select on a large document', async () => {
+  const { actions } = largeActionsFor({ parseLimit: 1000 });
+  const session = await connect({ actions });
+  try {
+    const calls = [
+      { name: 'outline_document', arguments: { document: 'hyperclay:1' } },
+      { name: 'find_in_document', arguments: { document: 'hyperclay:1', regex: 'needle' } },
+      { name: 'read_document', arguments: { document: 'hyperclay:1', select: 'main' } },
+    ];
+    for (const call of calls) {
+      const result = await session.client.callTool(call);
+      assert.equal(result.isError, true, call.name);
+      assert.equal(result.structuredContent.error.code, 'too-large-to-parse', call.name);
+      assert.match(result.structuredContent.error.hint, /range/, call.name);
+      assert.equal(JSON.parse(result.content[0].text).error.code, 'too-large-to-parse', call.name);
+    }
+
+    const ranged = await session.client.callTool({
+      name: 'read_document',
+      arguments: { document: 'hyperclay:1', range: { start: 0, length: 20 } },
+    });
+    assert.equal(ranged.isError, undefined);
+    assert.equal(ranged.structuredContent.html.length, 20);
+  } finally {
+    await session.close();
+  }
+});
+
+test('an oversized read_document keeps its outline only under the parse limit', async () => {
+  const limited = largeActionsFor({ parseLimit: 1000 });
+  const limitedSession = await connect({ actions: limited.actions });
+  try {
+    const result = await limitedSession.client.callTool({
+      name: 'read_document',
+      arguments: { document: 'hyperclay:1', maxChars: 1000 },
+    });
+    assert.equal(result.isError, undefined);
+    assert.equal(result.structuredContent.tooLarge, true);
+    assert.equal(result.structuredContent.outline, undefined);
+    assert.match(result.structuredContent.hint, /range/);
+  } finally {
+    await limitedSession.close();
+  }
+
+  const plain = largeActionsFor();
+  const plainSession = await connect({ actions: plain.actions });
+  try {
+    const result = await plainSession.client.callTool({
+      name: 'read_document',
+      arguments: { document: 'hyperclay:1', maxChars: 1000 },
+    });
+    assert.equal(result.isError, undefined);
+    assert.equal(result.structuredContent.tooLarge, true);
+    assert.ok(Array.isArray(result.structuredContent.outline));
+    assert.ok(result.structuredContent.outline.length > 0);
+  } finally {
+    await plainSession.close();
+  }
+});
+
+test('find_in_document still finds literal text past the parse limit, without element paths', async () => {
+  const { actions } = largeActionsFor({ parseLimit: 1000 });
+  const session = await connect({ actions });
+  try {
+    const found = await session.client.callTool({
+      name: 'find_in_document',
+      arguments: { document: 'hyperclay:1', text: 'needle' },
+    });
+    assert.equal(found.isError, undefined);
+    assert.equal(found.structuredContent.count, 1);
+    assert.equal(found.structuredContent.elementPaths, false);
+    assert.equal(found.structuredContent.matches.length, 1);
+    const [match] = found.structuredContent.matches;
+    assert.equal(match.path, null);
+    assert.equal(typeof match.line, 'number');
+    assert.ok(match.snippet.includes('needle'));
+
+    const refused = await session.client.callTool({
+      name: 'find_in_document',
+      arguments: { document: 'hyperclay:1', regex: 'needle' },
+    });
+    assert.equal(refused.isError, true);
+    assert.equal(refused.structuredContent.error.code, 'too-large-to-parse');
+    assert.equal(JSON.parse(refused.content[0].text).error.code, 'too-large-to-parse');
+  } finally {
+    await session.close();
+  }
+});
+
+test('an oversized read_document over the parse limit names only what still works', async () => {
+  const { actions } = largeActionsFor({ parseLimit: 1000 });
+  const session = await connect({ actions });
+  try {
+    const result = await session.client.callTool({
+      name: 'read_document',
+      arguments: { document: 'hyperclay:1', maxChars: 1000 },
+    });
+    assert.equal(result.isError, undefined);
+    assert.equal(result.structuredContent.tooLarge, true);
+    assert.equal(
+      result.structuredContent.hint,
+      'Too large to outline here. Use find_in_document with text to locate what you need, read_document with range to read part of it, and edit_document to change exact text.',
+    );
+  } finally {
+    await session.close();
+  }
+});
+
+const HUGE_SIZE = 200000;
+
+function hugeActionsFor(options = {}) {
+  const fake = fakeAdapter({ html: 'x'.repeat(HUGE_SIZE) });
+  const resolve = async (document) => ({ host: 'hyperclay', id: '1', ref: 'hyperclay:1' });
+  return { fake, actions: createActions({ adapters: { hyperclay: fake.adapter }, resolve, ...options }) };
+}
+
+test('a hosted edit_document stops scanning once the answer is known', async () => {
+  const { actions, fake } = hugeActionsFor({ editScanLimit: true });
+  const session = await connect({ actions });
+  try {
+    const ambiguous = await session.client.callTool({
+      name: 'edit_document',
+      arguments: { document: 'hyperclay:1', etag: 'E1', edits: [{ find: 'x', replace: 'y' }] },
+    });
+    assert.equal(ambiguous.isError, true);
+    assert.equal(ambiguous.structuredContent.error.code, 'edit-not-unique');
+    assert.match(ambiguous.structuredContent.error.message, /at least 2/);
+    assert.equal(ambiguous.structuredContent.error.details.atLeast, true);
+    assert.equal(ambiguous.structuredContent.error.details.count, 2);
+    assert.equal(fake.state.html, 'x'.repeat(HUGE_SIZE));
+
+    const edited = await session.client.callTool({
+      name: 'edit_document',
+      arguments: { document: 'hyperclay:1', etag: 'E1', edits: [{ find: 'x', replace: 'y', occurrence: 1 }] },
+    });
+    assert.equal(edited.isError, undefined);
+    assert.equal(edited.structuredContent.chars, HUGE_SIZE);
+    assert.equal(fake.state.html, 'y' + 'x'.repeat(HUGE_SIZE - 1));
+  } finally {
+    await session.close();
+  }
+});
+
+test('an edit_document without hosted options still reports the exact count', async () => {
+  const { actions } = hugeActionsFor();
+  const session = await connect({ actions });
+  try {
+    const ambiguous = await session.client.callTool({
+      name: 'edit_document',
+      arguments: { document: 'hyperclay:1', etag: 'E1', edits: [{ find: 'x', replace: 'y' }] },
+    });
+    assert.equal(ambiguous.isError, true);
+    assert.equal(ambiguous.structuredContent.error.code, 'edit-not-unique');
+    assert.match(ambiguous.structuredContent.error.message, new RegExp(`matches ${HUGE_SIZE} places`));
+    assert.equal(ambiguous.structuredContent.error.details.count, HUGE_SIZE);
+    assert.equal(ambiguous.structuredContent.error.details.atLeast, undefined);
+  } finally {
+    await session.close();
+  }
+});
+
+test('create_document refuses .htm and upper-case .HTML before any write', async () => {
+  for (const filePath of ['notes/a.htm', 'notes/A.HTML']) {
+    const { actions, fake } = actionsFor();
+    const session = await connect({ actions });
+    try {
+      const created = await session.client.callTool({
+        name: 'create_document',
+        arguments: { path: filePath, html: '<h1>Plan</h1>' },
+      });
+
+      assert.equal(created.isError, true, filePath);
+      assert.equal(created.structuredContent.error.code, 'invalid-argument', filePath);
+      assert.equal(fake.state.putFile, undefined, filePath);
+    } finally {
+      await session.close();
+    }
   }
 });

@@ -99,7 +99,16 @@ async function startServer() {
 
     if (request.method === 'PUT' && tail.length === 1 && tail[0] === 'files') {
       response.writeHead(201, { 'content-type': 'application/json', etag: 'F1' });
-      return response.end(JSON.stringify({ path: url.searchParams.get('path'), etag: 'F1', changed: true }));
+      return response.end(JSON.stringify({
+        id: 77,
+        path: url.searchParams.get('path'),
+        kind: 'document',
+        etag: 'F1',
+        size: Buffer.byteLength(body ?? ''),
+        changed: true,
+        created: true,
+        folders: [],
+      }));
     }
 
     if (request.method === 'GET' && tail.length === 1 && tail[0] === 'files') {
@@ -266,6 +275,29 @@ test('save with a stale --if-match exits 2 and prints the current etag on stdout
   });
 });
 
+test('create makes a new page from the file it is given', async () => {
+  await withServer(async ({ base, state, home }) => {
+    const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'clay-agent-create-test-'));
+    const file = path.join(folder, 'plan.html');
+    await fs.writeFile(file, HTML);
+    try {
+      const result = await runCli(['create', 'notes/plan.html', '--file', file, '--json'], { env: envFor(home, base) });
+
+      assert.equal(result.code, 0, result.stderr);
+      const put = state.requests.filter((entry) => entry.method === 'PUT').at(-1);
+      assert.ok(put, 'no PUT was sent');
+      assert.equal(new URL(put.url, 'http://localhost').searchParams.get('path'), 'notes/plan.html');
+      assert.equal(put.body, HTML);
+      const parsed = JSON.parse(result.stdout);
+      assert.equal(parsed.ref, 'hyperclay:77');
+      assert.equal(parsed.path, 'notes/plan.html');
+      assert.equal(parsed.etag, 'F1');
+    } finally {
+      await fs.rm(folder, { recursive: true, force: true });
+    }
+  });
+});
+
 test('edit with --if-match changes the document', async () => {
   await withServer(async ({ base, home, state }) => {
     const result = await runCli(['edit', 'hyperclay:1', '--find', 'Cat', '--replace', 'Dog', '--if-match', 'E1'], {
@@ -301,7 +333,7 @@ test('mcp on stdio lists every tool and keeps stdout clean', async () => {
     try {
       await client.connect(transport);
       const { tools } = await client.listTools();
-      assert.equal(tools.length, 17);
+      assert.equal(tools.length, 18);
       assert.ok(tools.some((tool) => tool.name === 'edit_document'));
     } finally {
       await client.close();
@@ -368,7 +400,7 @@ test('mcp starts without a key and answers each call with the login hint', async
     try {
       await client.connect(transport);
       const { tools } = await client.listTools();
-      assert.equal(tools.length, 17);
+      assert.equal(tools.length, 18);
 
       const read = await client.callTool({ name: 'read_document', arguments: { document: 'hyperclay:1' } });
       assert.equal(read.isError, true);
