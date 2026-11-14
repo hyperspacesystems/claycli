@@ -28,6 +28,7 @@ async function startServer() {
     requests: [],
     next: null,
     document: document(),
+    replays: new Map(),
     data: { visits: 1 },
     dataEtag: 'D1',
     versions: [
@@ -50,6 +51,24 @@ async function startServer() {
 
   function refusal(response, status, code, message, extra = {}, headers = {}) {
     json(response, status, { error: { code, message, ...extra } }, headers);
+  }
+
+  function fingerprint(kind, value) {
+    return `${kind}:${JSON.stringify(value)}`;
+  }
+
+  function repeat(kind, operationId, value) {
+    if (typeof operationId !== 'string') return null;
+    const seen = state.replays.get(operationId);
+    if (!seen) return null;
+    return seen.fingerprint === fingerprint(kind, value) ? seen.answer : 'reused';
+  }
+
+  function keep(kind, operationId, value, answer) {
+    if (typeof operationId === 'string') {
+      state.replays.set(operationId, { fingerprint: fingerprint(kind, value), answer });
+    }
+    return answer;
   }
 
   function route(request, response, body) {
@@ -84,6 +103,11 @@ async function startServer() {
 
     if (request.method === 'PUT' && tail.length === 2 && tail[0] === 'documents') {
       const parsed = JSON.parse(body || '{}');
+      const seen = repeat('save', parsed.operationId, parsed.html);
+      if (seen === 'reused') {
+        return refusal(response, 400, 'operation-reused', 'That operation id was used for another change.');
+      }
+      if (seen) return json(response, 200, seen);
       if (request.headers['if-match'] !== doc.etag) {
         return refusal(response, 412, 'conflict', 'The document changed.', {
           etag: doc.etag,
@@ -92,7 +116,12 @@ async function startServer() {
       }
       doc.html = parsed.html;
       doc.etag = 'E2';
-      return json(response, 200, { etag: doc.etag, changed: true, undoVersionId: 'v2' });
+      return json(response, 200, keep('save', parsed.operationId, parsed.html, {
+        etag: doc.etag,
+        changed: true,
+        operationId: parsed.operationId,
+        undoVersionId: 'v2',
+      }));
     }
 
     if (request.method === 'GET' && tail.length === 3 && tail[0] === 'documents' && tail[2] === 'data') {
@@ -101,12 +130,22 @@ async function startServer() {
 
     if (request.method === 'POST' && tail.length === 3 && tail[0] === 'documents' && tail[2] === 'data') {
       const parsed = JSON.parse(body || '{}');
+      const seen = repeat('data', parsed.operationId, parsed.data);
+      if (seen === 'reused') {
+        return refusal(response, 400, 'operation-reused', 'That operation id was used for another change.');
+      }
+      if (seen) return json(response, 200, seen);
       if (request.headers['if-match'] !== state.dataEtag) {
         return refusal(response, 412, 'conflict', 'The data changed.', { etag: state.dataEtag });
       }
       state.data = parsed.data;
       state.dataEtag = 'D2';
-      return json(response, 200, { data: state.data, etag: state.dataEtag, changed: true });
+      return json(response, 200, keep('data', parsed.operationId, parsed.data, {
+        etag: state.dataEtag,
+        changed: true,
+        operationId: parsed.operationId,
+        undoVersionId: 'v2',
+      }));
     }
 
     if (request.method === 'GET' && tail.length === 3 && tail[0] === 'documents' && tail[2] === 'versions') {
@@ -271,6 +310,101 @@ test('save sends If-Match and a fresh operationId each time', async () => {
     const secondBody = JSON.parse(server.state.requests[1].body);
     assert.match(secondBody.operationId, UUID_PATTERN);
     assert.notEqual(secondBody.operationId, firstBody.operationId);
+  });
+});
+
+test('a 503 recovery-unavailable is retryable and carries its hint', async () => {
+  await withServer(async (server) => {
+    server.answer(503, {
+      error: { code: 'recovery-unavailable', message: 'The current version could not be stored, so nothing was written.' },
+    });
+
+    await assert.rejects(client(server).save('doc_1', { html: '<h1>X</h1>', etag: 'E1' }), (error) => {
+      assert.ok(error instanceof ClayError);
+      assert.equal(error.code, 'recovery-unavailable');
+      assert.equal(error.status, 503);
+      assert.equal(error.retryable, true);
+      assert.equal(error.hint, 'Nothing was written. Send the same change again in a moment.');
+      return true;
+    });
+  });
+});
+
+test('a 400 operation-reused is not retryable and carries its hint', async () => {
+  await withServer(async (server) => {
+    server.answer(400, {
+      error: { code: 'operation-reused', message: 'That operation id was used for another change.' },
+    });
+
+    await assert.rejects(client(server).save('doc_1', { html: '<h1>X</h1>', etag: 'E1' }), (error) => {
+      assert.ok(error instanceof ClayError);
+      assert.equal(error.code, 'operation-reused');
+      assert.equal(error.status, 400);
+      assert.equal(error.retryable, false);
+      assert.equal(error.hint, 'Send each new change with a new operation id.');
+      return true;
+    });
+  });
+});
+
+test('save, writeData and restore send the operationId they are given', async () => {
+  await withServer(async (server) => {
+    const api = client(server);
+    await api.save('doc_1', {
+      html: '<h1>One</h1>', etag: 'E1', operationId: '11111111-1111-4111-8111-111111111111',
+    });
+    await api.writeData('doc_1', {
+      data: { visits: 2 }, etag: 'D1', operationId: '22222222-2222-4222-8222-222222222222',
+    });
+    await api.restore('doc_1', 'v1', { etag: 'E2', operationId: '33333333-3333-4333-8333-333333333333' });
+
+    assert.deepEqual(server.state.requests.map((seen) => JSON.parse(seen.body).operationId), [
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+      '33333333-3333-4333-8333-333333333333',
+    ]);
+
+    server.state.requests.length = 0;
+    await api.save('doc_1', { html: '<h1>Two</h1>', etag: 'E3' });
+    await api.writeData('doc_1', { data: { visits: 3 }, etag: 'D2' });
+    await api.restore('doc_1', 'v1', { etag: 'E3' });
+
+    const fresh = server.state.requests.map((seen) => JSON.parse(seen.body).operationId);
+    for (const id of fresh) assert.match(id, UUID_PATTERN);
+    assert.equal(new Set(fresh).size, 3);
+  });
+});
+
+test('one operation id answers the first save again and refuses other html', async () => {
+  await withServer(async (server) => {
+    const api = client(server);
+    const operationId = '44444444-4444-4444-8444-444444444444';
+
+    const first = await api.save('doc_1', { html: '<h1>One</h1>', etag: 'E1', operationId });
+    const second = await api.save('doc_1', { html: '<h1>One</h1>', etag: 'E1', operationId });
+
+    assert.deepEqual(first, { etag: 'E2', changed: true, operationId, undoVersionId: 'v2' });
+    assert.deepEqual(second, first);
+    assert.equal(server.state.requests.length, 2);
+    assert.equal(server.state.document.html, '<h1>One</h1>');
+    assert.equal(server.state.document.etag, 'E2');
+
+    await assert.rejects(api.save('doc_1', { html: '<h1>Two</h1>', etag: 'E2', operationId }), (error) => {
+      assert.equal(error.code, 'operation-reused');
+      assert.equal(error.status, 400);
+      return true;
+    });
+    assert.equal(server.state.document.html, '<h1>One</h1>');
+
+    server.state.requests.length = 0;
+    const dataId = '55555555-5555-4555-8555-555555555555';
+    const written = await api.writeData('doc_1', { data: { visits: 5 }, etag: 'D1', operationId: dataId });
+    const repeated = await api.writeData('doc_1', { data: { visits: 5 }, etag: 'D1', operationId: dataId });
+
+    assert.deepEqual(written, { etag: 'D2', changed: true, operationId: dataId, undoVersionId: 'v2' });
+    assert.deepEqual(repeated, written);
+    assert.equal(server.state.requests.length, 2);
+    assert.deepEqual(server.state.data, { visits: 5 });
   });
 });
 

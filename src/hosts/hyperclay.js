@@ -25,6 +25,9 @@ const HINTS = {
   'secret-in-content': 'Remove the agent key from the file, then try again.',
   managed: 'This place belongs to a collection or to one document. Write somewhere else.',
   'path-conflict': 'A file and a folder cannot share one name. Rename one of them.',
+  'recovery-unavailable': 'Nothing was written. Send the same change again in a moment.',
+  'operation-reused': 'Send each new change with a new operation id.',
+  'save-already-applied': 'This change was already saved. Read the document again to see what it holds.',
 };
 
 export function hyperclayClient({ base, getKey, fetchImpl = fetch, timeoutMs = 30000 } = {}) {
@@ -213,29 +216,29 @@ export function hyperclayClient({ base, getKey, fetchImpl = fetch, timeoutMs = 3
       return request(`/documents/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}`);
     },
 
-    async save(id, { html, etag } = {}) {
+    async save(id, { html, etag, operationId = randomUUID() } = {}) {
       const match = requireEtag('Saving', etag);
       return request(`/documents/${encodeURIComponent(id)}`, {
         method: 'PUT',
         etag: match,
-        body: { html, operationId: randomUUID() },
+        body: { html, operationId },
       });
     },
 
-    async writeData(id, { data, etag } = {}) {
+    async writeData(id, { data, etag, operationId = randomUUID() } = {}) {
       const match = requireEtag('Writing data', etag);
       return request(`/documents/${encodeURIComponent(id)}/data`, {
         method: 'POST',
         etag: match,
-        body: { data, operationId: randomUUID() },
+        body: { data, operationId },
       });
     },
 
-    async restore(id, versionId, { etag } = {}) {
+    async restore(id, versionId, { etag, operationId = randomUUID() } = {}) {
       const match = requireEtag('Restoring', etag);
       return request(
         `/documents/${encodeURIComponent(id)}/versions/${encodeURIComponent(versionId)}/restore`,
-        { method: 'POST', etag: match, body: { operationId: randomUUID() } },
+        { method: 'POST', etag: match, body: { operationId } },
       );
     },
 

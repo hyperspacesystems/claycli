@@ -151,11 +151,11 @@ export function hyperclayAdapter(client) {
     readData(id) {
       return client.readData(id);
     },
-    writeData(id, { data, etag } = {}) {
-      return client.writeData(id, { data, etag });
+    writeData(id, { data, etag, operationId } = {}) {
+      return client.writeData(id, { data, etag, operationId });
     },
-    save(id, { html, etag } = {}) {
-      return client.save(id, { html, etag });
+    save(id, { html, etag, operationId } = {}) {
+      return client.save(id, { html, etag, operationId });
     },
     async versions(id, { before } = {}) {
       const result = await client.versions(id, { before });
@@ -168,8 +168,8 @@ export function hyperclayAdapter(client) {
     version(id, versionId) {
       return client.version(id, versionId);
     },
-    restore(id, versionId, { etag } = {}) {
-      return client.restore(id, versionId, { etag });
+    restore(id, versionId, { etag, operationId } = {}) {
+      return client.restore(id, versionId, { etag, operationId });
     },
     claimSubdomain(id, subdomain) {
       return client.claimSubdomain(id, subdomain);

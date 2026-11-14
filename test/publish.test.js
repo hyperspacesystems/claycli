@@ -223,6 +223,34 @@ test('waits out a rate limit and sends the file again', async (t) => {
   assert.deepEqual(result.created, ['index.html', 'site.json']);
 });
 
+test('sends a file again after a 503 recovery-unavailable', async (t) => {
+  const root = await folder(t, { 'index.html': '<html></html>' });
+  const { files } = await walkFolder(root);
+  const { local } = await readLocal(files, 'demos/maya');
+  const plan = planPublish({ local, remote: [], to: 'demos/maya' });
+  const waits = [];
+  let attempts = 0;
+  const remote = fakeRemote();
+  const put = remote.putFile;
+  remote.putFile = async (filePath, bytes, options) => {
+    if (filePath.endsWith('/index.html')) {
+      attempts += 1;
+      if (attempts === 1) {
+        throw new ClayError('recovery-unavailable', 'Nothing was written.', { status: 503, retryable: true });
+      }
+    }
+    return put(filePath, bytes, options);
+  };
+
+  const result = await runPublish({ plan, to: 'demos/maya', remote, wait: async (seconds) => { waits.push(seconds); } });
+
+  assert.deepEqual(waits, [5]);
+  assert.equal(attempts, 2);
+  assert.deepEqual(result.created, ['index.html', 'site.json']);
+  assert.deepEqual(result.failed, []);
+  assert.deepEqual(result.pending, []);
+});
+
 test('settles a lost answer from one listing, and leaves what is not there pending', async (t) => {
   const root = await folder(t, {
     'index.html': '<html></html>',
