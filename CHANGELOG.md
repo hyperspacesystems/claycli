@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.5.0] - 2026-11-14
+
+### Added
+- `@panphora/clay-agent/hosted` answers MCP over HTTP inside hyperclay.com, with the same tools as the stdio server except publishing and hosting.
+- `create_document` and the `clay-agent create` command make a new `.html` or `.htmlclay` file.
+
+### Changed
+- In hosted mode, documents over 100,000 characters are not parsed. Literal text search still works on them, without element paths.
+- In hosted mode, `edit_document` stops scanning once a find is known to be ambiguous.
+- In hosted mode, at most four regex searches run at a time.
+
 ## [0.4.0] - 2026-11-12
 
 ### Added
