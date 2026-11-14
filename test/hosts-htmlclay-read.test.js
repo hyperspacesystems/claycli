@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
+import { userConfigDir } from '../src/discovery.js';
 import { htmlClayAdapter, htmlClayClient, htmlClayDocumentId } from '../src/hosts/htmlclay.js';
 import { buildActions } from '../src/runtime.js';
 import { resolveTarget } from '../src/target.js';
@@ -140,7 +141,7 @@ async function tempHome(t) {
 }
 
 async function writeHTMLClayConfig(home, port) {
-  const dir = path.join(home, 'Library', 'Application Support', 'htmlclay');
+  const dir = path.join(userConfigDir({ HOME: home }), 'htmlclay');
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(path.join(dir, 'config.json'), JSON.stringify({ port }), 'utf8');
 }
