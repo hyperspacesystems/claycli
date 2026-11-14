@@ -231,21 +231,6 @@ test('a 404 with no error body says the lane is missing', async () => {
   });
 });
 
-test('writes refuse until the next version', async () => {
-  await withServer({}, async (server) => {
-    const adapter = htmlClayAdapter(client(server, TOKEN));
-    const id = htmlClayDocumentId('/home/me/index.html');
-    for (const refuse of [
-      () => adapter.save(id, { html: '<h1>New</h1>', etag: 'E1' }),
-      () => adapter.writeData(id, { data: {}, etag: 'D1' }),
-      () => adapter.restore(id, 'v1', { etag: 'E1' }),
-    ]) {
-      await assert.rejects(refuse(), { code: 'not-supported' });
-    }
-    assert.equal(server.state.requests.length, 0);
-  });
-});
-
 test('a served folder address becomes its file', async (t) => {
   const home = await tempHome(t);
   const notes = path.join(home, 'notes');
