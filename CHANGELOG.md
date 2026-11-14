@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.1] - 2026-11-14
+
+### Added
+- Hints on `recovery-unavailable`, `operation-reused` and `save-already-applied` results from the HyperClay host, so a caller can tell these cases apart.
+
+### Changed
+- An operation id can be reused when calling the HyperClay host.
+
 ## [0.5.0] - 2026-11-14
 
 ### Added
