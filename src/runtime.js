@@ -2,6 +2,7 @@ import { createActions } from './actions.js';
 import { baseUrl, readKey } from './credentials.js';
 import { discover } from './discovery.js';
 import { ClayError } from './errors.js';
+import { htmlClayAdapter, htmlClayClient } from './hosts/htmlclay.js';
 import { hyperclayAdapter } from './hosts/hyperclay-adapter.js';
 import { hyperclayClient } from './hosts/hyperclay.js';
 import { resolveTarget } from './target.js';
@@ -18,13 +19,18 @@ export async function buildActions({
 } = {}) {
   const base = baseUrl({ flag: hyperclayUrl, env });
   const adapters = {};
+  const discovered = await discover(env);
 
   if (hosts.includes('hyperclay')) {
     const client = hyperclayClient({ base, getKey: () => readKey(base, env) });
     adapters.hyperclay = hyperclayAdapter(client);
   }
 
-  const discovered = await discover(env);
+  if (hosts.includes('htmlclay') && discovered.htmlClay) {
+    adapters.htmlclay = htmlClayAdapter(
+      htmlClayClient({ port: discovered.htmlClay.port, token: discovered.htmlClay.token }),
+    );
+  }
 
   async function resolve(document, { host } = {}) {
     const target = await resolveTarget(document, {

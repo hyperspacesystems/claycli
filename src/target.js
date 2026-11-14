@@ -4,6 +4,7 @@ import path from 'node:path';
 import { homeDir } from './credentials.js';
 import { discover } from './discovery.js';
 import { ClayError } from './errors.js';
+import { htmlClayDocumentId } from './hosts/htmlclay.js';
 
 const DOCUMENT_EXTENSIONS = new Set(['.html', '.htm', '.htmlclay']);
 const HYPERCLAY_REFERENCE = /^hyperclay:(\d+)$/;
@@ -101,7 +102,7 @@ function localTarget(root, file) {
 }
 
 function htmlClayFileTarget(port, home, file) {
-  return { host: 'htmlclay', port, path: slashPath(home, file), ref: file };
+  return { host: 'htmlclay', port, id: htmlClayDocumentId(file), path: slashPath(home, file), ref: file };
 }
 
 function localFromUrl(url, roots) {
@@ -111,14 +112,33 @@ function localFromUrl(url, roots) {
   return { host: 'local', port, path: relative, ref: `http://127.0.0.1:${port}/${relative}` };
 }
 
-function htmlClayFromUrl(url, port, env) {
+const SERVED_SUFFIX = '.htmlclay.localhost';
+
+// servedTarget is a served folder's address as the file it names, through the
+// folder list HTML Clay's config held when this process started.
+function servedTarget(url, found, port) {
+  const name = url.hostname.toLowerCase().slice(0, -SERVED_SUFFIX.length);
+  const folder = (found.htmlClay?.servedFolders ?? []).find((entry) => entry.name.toLowerCase() === name);
+  if (!folder) {
+    throw new ClayError('not-found', `HTML Clay serves no folder named ${name}.`, { hint: OPEN_AN_APP });
+  }
+  const relative = relativePathname(url.pathname);
+  const file = path.resolve(folder.path, relative);
+  if (!isInside(folder.path, file)) {
+    throw new ClayError('not-found', 'That address points outside the served folder.');
+  }
+  return { host: 'htmlclay', port, id: htmlClayDocumentId(file), path: relative, ref: file };
+}
+
+function htmlClayFromUrl(url, port, env, found) {
+  if (url.hostname.toLowerCase().endsWith(SERVED_SUFFIX)) return servedTarget(url, found, port);
   const slug = slugOf(url.hostname);
   if (slug) {
-    return { host: 'htmlclay', port, slug, ref: `http://${slug}.localhost:${port}/` };
+    return { host: 'htmlclay', port, slug, ref: `http://${slug}.localhost:${port}/${relativePathname(url.pathname)}` };
   }
   const relative = relativePathname(url.pathname);
   const ref = path.join(homeDir(env), relative);
-  return { host: 'htmlclay', port, path: relative, ref };
+  return { host: 'htmlclay', port, id: htmlClayDocumentId(ref), path: relative, ref };
 }
 
 function loopbackTarget(url, found, roots, hostOverride, env) {
@@ -132,10 +152,10 @@ function loopbackTarget(url, found, roots, hostOverride, env) {
   }
   if (hostOverride === 'htmlclay') {
     if (!clayServes) throw ambiguousTarget(url.href, hostOverride);
-    return htmlClayFromUrl(url, port, env);
+    return htmlClayFromUrl(url, port, env, found);
   }
   if (root) return localFromUrl(url, roots);
-  if (clayServes) return htmlClayFromUrl(url, port, env);
+  if (clayServes) return htmlClayFromUrl(url, port, env, found);
   throw hostUnavailable(port);
 }
 

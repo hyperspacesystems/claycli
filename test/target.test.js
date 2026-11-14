@@ -5,6 +5,7 @@ import path from 'node:path';
 import test from 'node:test';
 
 import { discover } from '../src/discovery.js';
+import { htmlClayDocumentId } from '../src/hosts/htmlclay.js';
 import { resolveTarget } from '../src/target.js';
 
 const ALIVE_PID = 111;
@@ -160,7 +161,13 @@ test('files go to Hyperclay Local inside a root, to HTML Clay under home, and no
 
   const elsewhere = await makeFile(path.join(home, 'docs'), 'b.html');
   const clay = await resolveTarget(elsewhere, { cwd: home, env, platform, discovered: found });
-  assert.deepEqual(clay, { host: 'htmlclay', port: HTMLCLAY_PORT, path: 'docs/b.html', ref: elsewhere });
+  assert.deepEqual(clay, {
+    host: 'htmlclay',
+    port: HTMLCLAY_PORT,
+    id: htmlClayDocumentId(elsewhere),
+    path: 'docs/b.html',
+    ref: elsewhere,
+  });
 
   await assert.rejects(
     resolveTarget(elsewhere, {
@@ -193,7 +200,7 @@ test('~/ and relative paths resolve like the absolute path, and bad paths are re
   const found = await discover(env, platform, { isAlive });
 
   const file = await makeFile(home, 'x.html');
-  const expected = { host: 'htmlclay', port: HTMLCLAY_PORT, path: 'x.html', ref: file };
+  const expected = { host: 'htmlclay', port: HTMLCLAY_PORT, id: htmlClayDocumentId(file), path: 'x.html', ref: file };
 
   assert.deepEqual(await resolveTarget(file, { cwd: home, env, platform, discovered: found }), expected);
   assert.deepEqual(await resolveTarget('~/x.html', { cwd: home, env, platform, discovered: found }), expected);

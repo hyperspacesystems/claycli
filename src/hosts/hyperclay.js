@@ -5,7 +5,7 @@ import { ClayError, asClayError, redact } from '../errors.js';
 const KEY_HINT =
   'Make an agent key in the dashboard (Account, then Agent keys), then run: npx -y @panphora/clay-agent login';
 
-const HINTS = {
+export const HINTS = {
   conflict: 'The document changed after you read it. Read it again and redo the change.',
   'precondition-required': 'Read the document first, then send its etag.',
   'read-first': 'Read the document first, then send its etag.',
@@ -30,13 +30,22 @@ const HINTS = {
   'save-already-applied': 'This change was already saved. Read the document again to see what it holds.',
 };
 
-export function hyperclayClient({ base, getKey, fetchImpl = fetch, timeoutMs = 30000 } = {}) {
+export function hyperclayClient({
+  base,
+  getKey,
+  fetchImpl = fetch,
+  timeoutMs = 30000,
+  label = 'hyperclay.com',
+  requireKey = true,
+  hints = HINTS,
+  noLane = 'This host does not have agent keys turned on.',
+} = {}) {
   const root = `${String(base ?? '').replace(/\/+$/, '')}/_/agent/v1`;
 
   function requireEtag(method, etag) {
     if (!etag) {
       throw new ClayError('read-first', `${method} needs the etag from a read.`, {
-        hint: HINTS['read-first'],
+        hint: hints['read-first'],
       });
     }
     return etag;
@@ -66,7 +75,7 @@ export function hyperclayClient({ base, getKey, fetchImpl = fetch, timeoutMs = 3
 
   async function request(pathname, { method = 'GET', query = null, body, raw, headers: extra = {}, etag, ifNoneMatch, noEtag = false } = {}) {
     const key = getKey ? await getKey() : null;
-    if (!key) {
+    if (!key && requireKey) {
       throw new ClayError('key-missing', 'Not signed in to hyperclay.com.', { hint: KEY_HINT });
     }
 
@@ -80,10 +89,8 @@ export function hyperclayClient({ base, getKey, fetchImpl = fetch, timeoutMs = 3
       }
     }
 
-    const headers = {
-      Authorization: `Bearer ${key}`,
-      Accept: 'application/json',
-    };
+    const headers = { Accept: 'application/json' };
+    if (key) headers.Authorization = `Bearer ${key}`;
     if (body !== undefined) headers['Content-Type'] = 'application/json';
     if (raw !== undefined) headers['Content-Type'] = 'application/octet-stream';
     if (etag) headers['If-Match'] = etag;
@@ -136,7 +143,7 @@ export function hyperclayClient({ base, getKey, fetchImpl = fetch, timeoutMs = 3
     if (response.ok) {
       if (parsed === null) {
         if (write) throw lostOutcome();
-        throw new ClayError('host-error', redact(`hyperclay.com answered ${response.status}.`), {
+        throw new ClayError('host-error', redact(`${label} answered ${response.status}.`), {
           status: response.status,
         });
       }
@@ -156,8 +163,8 @@ export function hyperclayClient({ base, getKey, fetchImpl = fetch, timeoutMs = 3
         const seconds = Number(retryAfter);
         if (retryAfter !== null && Number.isFinite(seconds)) details.retryAfter = seconds;
       }
-      throw new ClayError(detail.code, redact(detail.message || 'hyperclay.com refused this request.'), {
-        hint: HINTS[detail.code] ?? null,
+      throw new ClayError(detail.code, redact(detail.message || `${label} refused this request.`), {
+        hint: hints[detail.code] ?? null,
         status: response.status,
         etag: detail.etag ?? null,
         retryable,
@@ -168,12 +175,12 @@ export function hyperclayClient({ base, getKey, fetchImpl = fetch, timeoutMs = 3
     if (write && response.status >= 500) throw lostOutcome();
 
     if (response.status === 404) {
-      throw new ClayError('not-found', 'This host does not have agent keys turned on.', {
+      throw new ClayError('not-found', noLane, {
         status: response.status,
       });
     }
 
-    throw new ClayError('host-error', redact(`hyperclay.com answered ${response.status}.`), {
+    throw new ClayError('host-error', redact(`${label} answered ${response.status}.`), {
       status: response.status,
     });
   }
