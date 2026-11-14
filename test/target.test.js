@@ -71,7 +71,7 @@ test('discover reads both apps from the user config folder', async (t) => {
 
   const found = await discover(env, platform, { isAlive });
 
-  assert.deepEqual(found.htmlClay, { port: HTMLCLAY_PORT });
+  assert.deepEqual(found.htmlClay, { port: HTMLCLAY_PORT, token: null, servedFolders: [] });
   assert.deepEqual(found.hyperclayLocal, { roots: [{ path: root, port: LOCAL_PORT }] });
 });
 

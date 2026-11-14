@@ -35,11 +35,42 @@ function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+// htmlClay reads HTML Clay's own config folder: the port it answers on, the agent
+// token a program sends (null when the file is missing or not a token), and the
+// folders it serves, each path compared after resolving links.
 export async function htmlClay(env = process.env, platform = process.platform) {
-  const file = path.join(userConfigDir(env, platform), 'htmlclay', 'config.json');
-  const data = await readJson(file);
+  const dir = path.join(userConfigDir(env, platform), 'htmlclay');
+  const data = await readJson(path.join(dir, 'config.json'));
   if (!isObject(data) || !isPositiveInteger(data.port)) return null;
-  return { port: data.port };
+  const servedFolders = [];
+  for (const folder of Array.isArray(data.servedFolders) ? data.servedFolders : []) {
+    if (!isObject(folder)) continue;
+    if (typeof folder.id !== 'string' || folder.id === '') continue;
+    if (typeof folder.name !== 'string' || folder.name === '') continue;
+    if (typeof folder.path !== 'string' || !path.isAbsolute(folder.path)) continue;
+    servedFolders.push({ id: folder.id, name: folder.name, path: await realPathOrSelf(folder.path), serving: folder.serving === true });
+  }
+  return { port: data.port, token: await readAgentToken(path.join(dir, 'agent-token')), servedFolders };
+}
+
+async function realPathOrSelf(file) {
+  try {
+    return await fs.realpath(file);
+  } catch {
+    return path.resolve(file);
+  }
+}
+
+// readAgentToken is the token HTML Clay wrote at start: 32 random bytes as hex.
+async function readAgentToken(file) {
+  let text;
+  try {
+    text = await fs.readFile(file, 'utf8');
+  } catch {
+    return null;
+  }
+  const token = text.trim();
+  return /^[0-9a-f]{64}$/.test(token) ? token : null;
 }
 
 export function defaultIsAlive(pid) {
