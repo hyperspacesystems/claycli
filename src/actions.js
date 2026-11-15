@@ -21,6 +21,12 @@ const CUT_HINT =
 const WHOLE_READ_FIRST_HINT =
   'Read the whole document with read_document first; save_document replaces all of it.';
 
+// undoOf passes on the version a write replaced, when the host names one, so an
+// agent can restore it to undo its own change.
+function undoOf(result) {
+  return result.undoVersionId === undefined ? {} : { undoVersionId: result.undoVersionId };
+}
+
 function readFirstHint(explicitEtag) {
   return explicitEtag
     ? 'Pass --if-match with the etag from a read.'
@@ -242,7 +248,14 @@ export function createActions({ adapters, resolve, session = createSession(), re
       const etag = etagFor(input, ref);
       const result = await adapter.writeData(id, { data: input.data, etag });
       afterWrite(ref, result.etag);
-      return { ref, host, etag: result.etag, changed: result.changed, data: result.data ?? input.data };
+      return {
+        ref,
+        host,
+        etag: result.etag,
+        changed: result.changed,
+        data: result.data ?? input.data,
+        ...undoOf(result),
+      };
     },
 
     async edit_document(input = {}) {
@@ -325,7 +338,7 @@ export function createActions({ adapters, resolve, session = createSession(), re
       const etag = etagFor(input, ref);
       const result = await adapter.restore(id, input.version, { etag });
       afterWrite(ref, result.etag);
-      return { ref, host, etag: result.etag };
+      return { ref, host, etag: result.etag, ...undoOf(result) };
     },
 
     async claim_subdomain(input = {}) {

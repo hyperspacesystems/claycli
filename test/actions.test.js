@@ -101,7 +101,7 @@ function fakeAdapter({ html = ORIGINAL } = {}) {
       }
       state.data = data;
       state.dataEtag = nextEtag('D', state.dataEtag);
-      return { data: state.data, etag: state.dataEtag, changed: true };
+      return { data: state.data, etag: state.dataEtag, changed: true, undoVersionId: 'vd' };
     },
     async save(id, { html: next, etag } = {}) {
       calls.save += 1;
@@ -130,7 +130,7 @@ function fakeAdapter({ html = ORIGINAL } = {}) {
         throw new ClayError('conflict', 'The document changed.', { etag: state.etag });
       }
       state.etag = nextEtag('E', state.etag);
-      return { etag: state.etag };
+      return { etag: state.etag, changed: true, undoVersionId: 'vr' };
     },
     async claimSubdomain(id, subdomain) {
       calls.claimSubdomain += 1;
@@ -508,6 +508,19 @@ test('read_data then write_data without an etag uses the data read etag', async 
   assert.equal(written.changed, true);
   assert.deepEqual(written.data, { title: 'Updated' });
   assert.equal(fake.calls.writeData, 1);
+});
+
+test('write_data and restore_version answer the version they replaced', async () => {
+  const fake = fakeAdapter();
+  const actions = actionsFor(fake);
+
+  await actions.read_data({ document: 'hyperclay:1' });
+  const written = await actions.write_data({ document: 'hyperclay:1', data: { title: 'Updated' } });
+  assert.equal(written.undoVersionId, 'vd');
+
+  const read = await actions.read_document({ document: 'hyperclay:1' });
+  const restored = await actions.restore_version({ document: 'hyperclay:1', version: 'v1', etag: read.etag });
+  assert.equal(restored.undoVersionId, 'vr');
 });
 
 test('edit_document refuses a find that occurs twice', async () => {
