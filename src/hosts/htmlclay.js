@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import http from 'node:http';
 import path from 'node:path';
 
 import { ClayError } from '../errors.js';
@@ -17,9 +18,35 @@ export function htmlClayDocumentId(file) {
   return `p_${Buffer.from(file, 'utf8').toString('base64url')}`;
 }
 
+// laneFetch sends one request with node:http and answers the part of a fetch
+// Response the client reads. Node's fetch adds Sec-Fetch-Mode to every request,
+// and HTML Clay's lane refuses a request that carries a header a browser sends.
+// A redirect is answered as it is, never followed.
+function laneFetch(url, { method = 'GET', headers = {}, body, signal } = {}) {
+  return new Promise((resolve, reject) => {
+    const request = http.request(url, { method, headers, signal, agent: false }, (response) => {
+      const chunks = [];
+      const text = new Promise((done, failed) => {
+        response.on('data', (chunk) => chunks.push(chunk));
+        response.on('end', () => done(Buffer.concat(chunks).toString('utf8')));
+        response.on('error', (error) => failed(signal?.aborted ? signal.reason : error));
+      });
+      text.catch(() => {});
+      resolve({
+        status: response.statusCode,
+        ok: response.statusCode >= 200 && response.statusCode < 300,
+        headers: { get: (name) => response.headers[name.toLowerCase()] ?? null },
+        text: () => text,
+      });
+    });
+    request.on('error', reject);
+    request.end(body);
+  });
+}
+
 // htmlClayClient is the hosted client pointed at HTML Clay's loopback lane. The
 // token is sent when HTML Clay wrote one; a lane that predates it needs none.
-export function htmlClayClient({ port, token = null, fetchImpl = fetch, timeoutMs = 30000 } = {}) {
+export function htmlClayClient({ port, token = null, fetchImpl = laneFetch, timeoutMs = 30000 } = {}) {
   return hyperclayClient({
     base: `http://127.0.0.1:${port}`,
     getKey: async () => token,

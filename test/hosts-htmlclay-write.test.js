@@ -7,6 +7,10 @@ import { htmlClayAdapter, htmlClayClient, htmlClayDocumentId } from '../src/host
 
 const TOKEN = 'a'.repeat(64);
 
+// The lane admits a request for 127.0.0.1 on its port that carries none of the
+// headers a browser sends, and answers 403 to any other.
+const BROWSER_HEADERS = ['origin', 'sec-fetch-site', 'sec-fetch-mode', 'sec-fetch-dest', 'cookie'];
+
 const HOME_HTML = '<!doctype html><h1>Home</h1>';
 const OLD_HTML = '<h1>Old</h1>';
 
@@ -151,6 +155,11 @@ async function startServer({ doc = document('/home/me/index.html'), truncated = 
         headers: request.headers,
         body,
       });
+      if (request.headers.host !== `127.0.0.1:${request.socket.localPort}` || BROWSER_HEADERS.some((name) => name in request.headers)) {
+        response.writeHead(403, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ error: { code: 'forbidden', message: 'Not a program on this machine.' } }));
+        return;
+      }
       const next = state.next;
       state.next = null;
       if (next && !next.applyThenDestroy) {

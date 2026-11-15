@@ -12,6 +12,10 @@ import { resolveTarget } from '../src/target.js';
 
 const TOKEN = 'a'.repeat(64);
 
+// The lane admits a request for 127.0.0.1 on its port that carries none of the
+// headers a browser sends, and answers 403 to any other.
+const BROWSER_HEADERS = ['origin', 'sec-fetch-site', 'sec-fetch-mode', 'sec-fetch-dest', 'cookie'];
+
 const HOME_HTML = '<!doctype html><h1>Home</h1>';
 
 function document(file) {
@@ -95,6 +99,11 @@ async function startServer({ doc = document('/home/me/index.html'), truncated = 
         headers: request.headers,
         body: Buffer.concat(chunks).toString('utf8'),
       });
+      if (request.headers.host !== `127.0.0.1:${request.socket.localPort}` || BROWSER_HEADERS.some((name) => name in request.headers)) {
+        response.writeHead(403, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({ error: { code: 'forbidden', message: 'Not a program on this machine.' } }));
+        return;
+      }
       const next = state.next;
       state.next = null;
       if (next) {
@@ -157,6 +166,15 @@ test('reads a document through the lane, sending the token when there is one', a
     const anonymous = await client(server, null).read(id);
     assert.equal(anonymous.html, HOME_HTML);
     assert.equal(server.state.requests[1].headers.authorization, undefined);
+  });
+});
+
+test('a request names 127.0.0.1 and carries no header a browser sends', async () => {
+  await withServer({}, async (server) => {
+    await client(server, TOKEN).read(htmlClayDocumentId('/home/me/index.html'));
+    const [{ headers }] = server.state.requests;
+    assert.equal(headers.host, `127.0.0.1:${server.port}`);
+    for (const name of BROWSER_HEADERS) assert.equal(headers[name], undefined, name);
   });
 });
 
