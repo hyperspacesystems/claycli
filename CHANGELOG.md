@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.6.1] - 2026-11-14
+
+### Fixed
+- HTML requests to a Clay lane are no longer rejected for carrying browser headers.
+
 ## [0.6.0] - 2026-11-14
 
 ### Added
