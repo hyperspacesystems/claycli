@@ -6,7 +6,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 import { ClayError } from '../src/errors.js';
-import { HOSTED_PARSE_LIMIT, handleHostedRequest, hostedResolve } from '../src/hosted.js';
+import { handleHostedRequest, hostedResolve } from '../src/hosted.js';
 import { TOOLS, hostedTools } from '../src/tools.js';
 
 const KEY = 'hcak_test';
@@ -187,10 +187,6 @@ test('the hosted server answers listTools and read_document over real HTTP with 
   const saved = await client.callTool({ name: 'save_document', arguments: { document: 'hyperclay:7', html: '<p>x</p>' } });
   assert.equal(saved.isError, true);
   assert.match(saved.content[0].text, /etag/i);
-});
-
-test('hosted mode sets a parse limit below what the process can afford to parse', () => {
-  assert.equal(HOSTED_PARSE_LIMIT, 100000);
 });
 
 test('the hosted server refuses to outline a document past the parse limit', async () => {

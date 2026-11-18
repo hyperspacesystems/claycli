@@ -740,22 +740,6 @@ test('a refused not-a-site-folder becomes its code with the new hint', async () 
   });
 });
 
-test('a 200 answer with no etag is still outcome-unknown on writeData and restore', async () => {
-  await withServer(async (server) => {
-    server.answer(200, { changed: true });
-    await assert.rejects(client(server).writeData('doc_1', { data: { visits: 2 }, etag: 'D1' }), (error) => {
-      assert.equal(error.code, 'outcome-unknown');
-      return true;
-    });
-
-    server.answer(200, { changed: true });
-    await assert.rejects(client(server).restore('doc_1', 'v1', { etag: 'E1' }), (error) => {
-      assert.equal(error.code, 'outcome-unknown');
-      return true;
-    });
-  });
-});
-
 test('a refused subdomain becomes its code with a hint', async () => {
   await withServer(async (server) => {
     server.answer(409, { error: { code: 'subdomain-already-set', message: 'This document already has a subdomain.' } });

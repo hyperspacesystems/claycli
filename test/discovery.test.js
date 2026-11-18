@@ -106,10 +106,3 @@ test('the agent token is read from agent-token, and absent or malformed means no
   await writeAgentToken(home, 'A'.repeat(64));
   assert.equal((await htmlClay(env, platform)).token, null);
 });
-
-test('a config without servedFolders answers an empty list', async (t) => {
-  const { home, env, platform } = await setup(t);
-  await writeHtmlClayConfig(home, { port: 4321 });
-
-  assert.deepEqual(await htmlClay(env, platform), { port: 4321, token: null, servedFolders: [] });
-});

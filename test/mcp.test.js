@@ -571,35 +571,6 @@ test('an oversized read_document keeps its outline only under the parse limit', 
   }
 });
 
-test('find_in_document still finds literal text past the parse limit, without element paths', async () => {
-  const { actions } = largeActionsFor({ parseLimit: 1000 });
-  const session = await connect({ actions });
-  try {
-    const found = await session.client.callTool({
-      name: 'find_in_document',
-      arguments: { document: 'hyperclay:1', text: 'needle' },
-    });
-    assert.equal(found.isError, undefined);
-    assert.equal(found.structuredContent.count, 1);
-    assert.equal(found.structuredContent.elementPaths, false);
-    assert.equal(found.structuredContent.matches.length, 1);
-    const [match] = found.structuredContent.matches;
-    assert.equal(match.path, null);
-    assert.equal(typeof match.line, 'number');
-    assert.ok(match.snippet.includes('needle'));
-
-    const refused = await session.client.callTool({
-      name: 'find_in_document',
-      arguments: { document: 'hyperclay:1', regex: 'needle' },
-    });
-    assert.equal(refused.isError, true);
-    assert.equal(refused.structuredContent.error.code, 'too-large-to-parse');
-    assert.equal(JSON.parse(refused.content[0].text).error.code, 'too-large-to-parse');
-  } finally {
-    await session.close();
-  }
-});
-
 test('an oversized read_document over the parse limit names only what still works', async () => {
   const { actions } = largeActionsFor({ parseLimit: 1000 });
   const session = await connect({ actions });

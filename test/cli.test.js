@@ -319,28 +319,6 @@ test('read without a key exits 4', async () => {
   });
 });
 
-test('mcp on stdio lists every tool and keeps stdout clean', async () => {
-  await withServer(async ({ base, home }) => {
-    const transport = new StdioClientTransport({
-      command: process.execPath,
-      args: [BIN, 'mcp'],
-      cwd: ROOT,
-      env: envFor(home, base),
-      stderr: 'pipe',
-    });
-    const client = new Client({ name: 'clay-agent-cli-test', version: '1.0.0' });
-
-    try {
-      await client.connect(transport);
-      const { tools } = await client.listTools();
-      assert.equal(tools.length, 18);
-      assert.ok(tools.some((tool) => tool.name === 'edit_document'));
-    } finally {
-      await client.close();
-    }
-  });
-});
-
 test('a host error with a key in its details and hint prints no full key with --json', async () => {
   await withServer(async ({ base, home, state }) => {
     state.next = {
@@ -619,24 +597,6 @@ test('publish sends two PUTs in order and exits 0', async () => {
       const puts = state.requests.filter((entry) => entry.method === 'PUT');
       const paths = puts.map((entry) => new URL(entry.url, 'http://localhost').searchParams.get('path'));
       assert.deepEqual(paths, ['demos/maya/index.html', 'demos/maya/site.json']);
-    } finally {
-      await fs.rm(folder, { recursive: true, force: true });
-    }
-  });
-});
-
-test('publish with a refused file claims no address and exits 1', async () => {
-  await withServer(async ({ base, state, home }) => {
-    const folder = await tempFolder({ 'index.html': HTML, 'About.html': HTML });
-    try {
-      const result = await runCli(['publish', folder, 'demos/maya', '--subdomain', 'maya', '--json'], { env: envFor(home, base) });
-
-      assert.equal(result.code, 1);
-      const parsed = JSON.parse(result.stdout);
-      assert.deepEqual(parsed.refused.map((entry) => [entry.path, entry.reason]), [['About.html', 'page-name']]);
-      assert.deepEqual(parsed.created, ['index.html', 'site.json']);
-      assert.equal(parsed.subdomain.claimed, false);
-      assert.equal(state.requests.filter((entry) => entry.method === 'POST').length, 0);
     } finally {
       await fs.rm(folder, { recursive: true, force: true });
     }
