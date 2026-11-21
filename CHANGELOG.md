@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.7.0] - 2026-11-20
+
+### Added
+- `write_data` and `restore_version` answer with `undoVersionId`, the version the write replaced, when the host names one.
+
 ## [0.6.1] - 2026-11-14
 
 ### Fixed
