@@ -54,18 +54,19 @@ function checkForwardsTo(stage, name) {
 // One step toward the old name being current. npm shows a version a minute or so after its
 // publish, and `npm deprecate` marks only the versions npm shows. A notice added straight after
 // the publish misses the new version, so it is added on a later step, once npm shows that version.
-// `published` says an earlier step of this run already published the old name.
-export function publishOldName({ root = ROOT, run = npm, log = console.log, published = false } = {}) {
+// `published` and `noticed` say what earlier steps of this run already did, so each happens once.
+export function publishOldName({ root = ROOT, run = npm, log = console.log, published = false, noticed = false } = {}) {
   const { name, version } = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   if (isPublished(run, OLD_NAME, version)) {
     if (run(['view', `${OLD_NAME}@${version}`, 'deprecated']).trim()) {
       log(`${OLD_NAME}@${version} is on npm with its rename notice.`);
       return 'current';
     }
+    if (noticed) return 'unnoticed';
     noticeEveryVersion(run, name);
     return 'noticed';
   }
-  if (published) return 'published';
+  if (published) return 'hidden';
   if (!isPublished(run, name, version)) {
     log(`${name}@${version} is not on npm yet.`);
     return 'waiting';
@@ -88,21 +89,24 @@ export function publishOldName({ root = ROOT, run = npm, log = console.log, publ
   return 'published';
 }
 
-// Repeats the step until npm shows the old name at this version with its notice.
+// Why the deploy step stopped, by the last step's answer. A second publish of a version npm
+// already holds fails, so the middle case says to wait before running the deploy again.
+const GAVE_UP = {
+  waiting: `${OLD_NAME} was not published, so it is one release behind. Run \`npm run deploy\` again.`,
+  hidden: `${OLD_NAME} was published, but npm does not show it yet. Wait a few minutes, then run \`npm run deploy\` again.`,
+  unnoticed: `${OLD_NAME} is on npm, but npm does not show its rename notice yet. Run \`npm run deploy\` again.`,
+};
+
+// Repeats the step until npm shows the old name at this version with its notice. A step that
+// just published or added the notice always gets one more look before the run gives up.
 export async function publishOldNameWhenVisible({ waitMs = 5 * 60_000, pauseMs = 15_000, ...options } = {}) {
   const giveUpAt = Date.now() + waitMs;
-  let published = false;
+  const did = { published: false, noticed: false };
   for (;;) {
-    const result = publishOldName({ ...options, published });
+    const result = publishOldName({ ...options, ...did });
     if (result === 'current') return result;
-    published ||= result === 'published';
-    if (Date.now() >= giveUpAt) {
-      throw new Error(
-        result === 'waiting'
-          ? `${OLD_NAME} was not published, so it is one release behind. Run \`npm run deploy\` again.`
-          : `${OLD_NAME} is published, but npm does not show its rename notice yet. Run \`npm run deploy\` again.`,
-      );
-    }
+    if (result in did) did[result] = true;
+    else if (Date.now() >= giveUpAt) throw new Error(GAVE_UP[result]);
     await sleep(pauseMs);
   }
 }
