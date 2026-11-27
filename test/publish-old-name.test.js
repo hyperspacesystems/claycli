@@ -26,28 +26,38 @@ function fixture(t, version = '1.2.3') {
 }
 
 // A stand-in for npm. `onNpm` maps each package to its versions and their notices, and answers
-// the way npm 11 does: E404 for a missing package or version, an empty line for no notice.
-function registry(onNpm) {
+// the way npm 11 does: E404 for a missing package or version, an empty line for no notice. Like
+// npm, it shows a published version only later (after `showsAfter` more lookups), puts a notice
+// only on the versions it shows, and refuses a second publish of the same version.
+function registry(onNpm, { showsAfter = 0 } = {}) {
   const staged = [];
   const notices = [];
   const texts = [];
+  let processing = null;
   const run = (args, { cwd } = {}) => {
     const [command, spec, field] = args;
     if (command === 'view') {
+      if (processing && processing.lookups-- === 0) {
+        (onNpm[processing.name] ??= {})[processing.version] = '';
+        processing = null;
+      }
       const [, name, version] = spec.match(/^(@[^@]+)@(.+)$/);
       const notice = onNpm[name]?.[version];
       if (notice === undefined) throw Object.assign(new Error('not found'), { stderr: 'npm error code E404' });
       return field === 'version' ? `${version}\n` : `${notice}\n`;
     }
     if (command === 'publish') {
-      staged.push({
-        manifest: JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8')),
-        files: fs.readdirSync(cwd, { recursive: true }).map(String).sort(),
-      });
+      const manifest = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
+      if (staged.some((earlier) => earlier.manifest.version === manifest.version)) {
+        throw Object.assign(new Error('published twice'), { stderr: 'npm error code E403' });
+      }
+      staged.push({ manifest, files: fs.readdirSync(cwd, { recursive: true }).map(String).sort() });
+      processing = { name: manifest.name, version: manifest.version, lookups: showsAfter };
     }
     if (command === 'deprecate') {
       notices.push(spec);
       texts.push(field);
+      for (const version of Object.keys(onNpm[spec] ?? {})) onNpm[spec][version] = field;
     }
     return '';
   };
@@ -68,14 +78,11 @@ test('the old name is published pinned to the exact current version', (t) => {
 
 test('the rename notice goes on every version of the old name, never on one', (t) => {
   const root = fixture(t);
-  const published = registry({ [OLD]: { '0.7.0': '' }, [NEW]: { '1.2.3': '' } });
-  publishOldName({ root, run: published.run, log: () => {} });
-  assert.deepEqual(published.notices, [OLD]);
-  assert.ok(published.texts[0].includes(NEW));
-
-  const missing = registry({ [OLD]: { '0.7.0': '', '1.2.3': '' }, [NEW]: { '1.2.3': '' } });
-  assert.equal(publishOldName({ root, run: missing.run, log: () => {} }), 'current');
-  assert.deepEqual(missing.notices, [OLD]);
+  const npm = registry({ [OLD]: { '0.7.0': 'Renamed', '1.2.3': '' }, [NEW]: { '1.2.3': '' } });
+  assert.equal(publishOldName({ root, run: npm.run, log: () => {} }), 'noticed');
+  assert.deepEqual(npm.notices, [OLD]);
+  assert.ok(npm.texts[0].includes(NEW));
+  assert.equal(npm.staged.length, 0);
 });
 
 test('nothing is published or changed when the old name is current and carries its notice', (t) => {
@@ -115,8 +122,18 @@ test('the deploy step publishes once npm shows the new version', async (t) => {
     if (args[0] === 'view' && args[1].startsWith(`${NEW}@`) && ++asked === 3) onNpm[NEW] = { '1.2.3': '' };
     return npm.run(args, options);
   };
-  assert.equal(await publishOldNameWhenVisible({ root, run, log: () => {}, waitMs: 60_000, pauseMs: 0 }), 'published');
+  assert.equal(await publishOldNameWhenVisible({ root, run, log: () => {}, waitMs: 60_000, pauseMs: 0 }), 'current');
   assert.equal(npm.staged.length, 1);
+});
+
+test('the deploy step adds the notice once npm shows the version it published, so that version carries it too', async (t) => {
+  const root = fixture(t);
+  const onNpm = { [OLD]: { '0.7.0': '' }, [NEW]: { '1.2.3': '' } };
+  const npm = registry(onNpm, { showsAfter: 4 });
+  assert.equal(await publishOldNameWhenVisible({ root, run: npm.run, log: () => {}, waitMs: 60_000, pauseMs: 0 }), 'current');
+  assert.equal(npm.staged.length, 1);
+  assert.match(onNpm[OLD]['1.2.3'], /Renamed to/);
+  assert.match(onNpm[OLD]['0.7.0'], /Renamed to/);
 });
 
 test('the forwarder in this repo passes commands to this package, by its current name', () => {

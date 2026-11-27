@@ -3,8 +3,8 @@
 // current version of this package. npx refreshes a cached package only when the package named on
 // the command line has a new version, so people who still run the old name get updates only if the
 // old name is published with every release. `npm run deploy` runs this. It does nothing when the
-// old name is already current, and it fails when it could not bring the old name up to date, so
-// the deploy is not recorded as done and the next one tries again.
+// old name is already current and carries its rename notice, and it fails when it could not get
+// the old name there, so the deploy is not recorded as done and the next one tries again.
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -51,13 +51,21 @@ function checkForwardsTo(stage, name) {
   }
 }
 
-export function publishOldName({ root = ROOT, run = npm, log = console.log } = {}) {
+// One step toward the old name being current. npm shows a version a minute or so after its
+// publish, and `npm deprecate` marks only the versions npm shows. A notice added straight after
+// the publish misses the new version, so it is added on a later step, once npm shows that version.
+// `published` says an earlier step of this run already published the old name.
+export function publishOldName({ root = ROOT, run = npm, log = console.log, published = false } = {}) {
   const { name, version } = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   if (isPublished(run, OLD_NAME, version)) {
-    if (!run(['view', `${OLD_NAME}@${version}`, 'deprecated']).trim()) noticeEveryVersion(run, name);
-    log(`${OLD_NAME}@${version} is already on npm.`);
-    return 'current';
+    if (run(['view', `${OLD_NAME}@${version}`, 'deprecated']).trim()) {
+      log(`${OLD_NAME}@${version} is on npm with its rename notice.`);
+      return 'current';
+    }
+    noticeEveryVersion(run, name);
+    return 'noticed';
   }
+  if (published) return 'published';
   if (!isPublished(run, name, version)) {
     log(`${name}@${version} is not on npm yet.`);
     return 'waiting';
@@ -76,19 +84,24 @@ export function publishOldName({ root = ROOT, run = npm, log = console.log } = {
   } finally {
     fs.rmSync(stage, { recursive: true, force: true });
   }
-  noticeEveryVersion(run, name);
   log(`Published ${OLD_NAME}@${version}, which passes every command to ${name}@${version}.`);
   return 'published';
 }
 
-// npm can take a few minutes to show a version that was just published.
+// Repeats the step until npm shows the old name at this version with its notice.
 export async function publishOldNameWhenVisible({ waitMs = 5 * 60_000, pauseMs = 15_000, ...options } = {}) {
   const giveUpAt = Date.now() + waitMs;
+  let published = false;
   for (;;) {
-    const result = publishOldName(options);
-    if (result !== 'waiting') return result;
+    const result = publishOldName({ ...options, published });
+    if (result === 'current') return result;
+    published ||= result === 'published';
     if (Date.now() >= giveUpAt) {
-      throw new Error(`${OLD_NAME} was not published, so it is one release behind. Run \`npm run deploy\` again.`);
+      throw new Error(
+        result === 'waiting'
+          ? `${OLD_NAME} was not published, so it is one release behind. Run \`npm run deploy\` again.`
+          : `${OLD_NAME} is published, but npm does not show its rename notice yet. Run \`npm run deploy\` again.`,
+      );
     }
     await sleep(pauseMs);
   }
