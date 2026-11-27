@@ -1,0 +1,12 @@
+{
+  "name": "claycli",
+  "compatibility_date": "2026-07-16",
+  "assets": {
+    "directory": "./website",
+    "not_found_handling": "404-page"
+  },
+  "routes": [
+    { "pattern": "claycli.com", "custom_domain": true },
+    { "pattern": "www.claycli.com", "custom_domain": true }
+  ]
+}

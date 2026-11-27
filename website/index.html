@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <title>Clay CLI: give your AI agent access to your Hyperclay files</title>
+  <meta name="description" content="Connect Claude Code, Cursor or Claude Desktop to your HTML files on hyperclay.com with MCP and the claycli command. Versioned edits, scoped keys and conflict checks.">
+  <link rel="canonical" href="https://claycli.com/">
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
+  <meta property="og:title" content="Clay CLI: give your AI agent access to your Hyperclay files">
+  <meta property="og:description" content="Connect Claude Code, Cursor or Claude Desktop to your HTML files on hyperclay.com with MCP and the claycli command. Versioned edits, scoped keys and conflict checks.">
+  <meta property="og:url" content="https://claycli.com/">
+  <meta property="og:type" content="website">
+  <link rel="preload" href="fonts/ibm-plex-sans-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/ibm-plex-sans-latin-600-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/ibm-plex-mono-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://signal.hyperclay.com/v1.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="skip-link visually-hidden" href="#main-heading">Skip to content</a>
+    <div class="wrap topbar-inner">
+      <a class="brand" href="/">
+        <svg viewBox="0 0 32 32" aria-hidden="true">
+          <rect x="0.5" y="0.5" width="31" height="31" rx="3.5" fill="#1E2022" stroke="#3A3D41"/>
+          <rect x="4" y="4" width="24" height="15" rx="1.5" fill="#C6D4C8"/>
+          <path d="M8.5 7.75L12.25 11.5L8.5 15.25" fill="none" stroke="#14211A" stroke-width="2" stroke-linecap="square"/>
+          <rect x="14.5" y="13.6" width="6.5" height="1.9" fill="#14211A"/>
+          <rect x="4" y="23" width="5" height="5" rx="1" fill="#E2602F"/>
+          <rect x="12" y="23" width="16" height="5" rx="1" fill="#3A3D41"/>
+        </svg>
+        <span>Clay CLI</span>
+      </a>
+      <nav class="topnav" aria-label="Primary">
+        <a href="https://hyperclay.com/docs/agents/">Docs</a>
+        <a href="https://www.npmjs.com/package/@panphora/claycli">npm</a>
+        <a href="https://github.com/hyperspacesystems/claycli">GitHub</a>
+        <a href="https://hyperclay.com/">Hyperclay</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero" aria-labelledby="main-heading">
+      <div class="wrap">
+        <div class="hero-head">
+          <h1 id="main-heading" tabindex="-1">Give your AI agent access to your Hyperclay files</h1>
+          <p class="lede">Clay CLI runs on your computer so your AI agent can read and edit the plain HTML files you host on hyperclay.com. Every change goes into version history, stale writes are refused, and an agent cannot delete your work.</p>
+        </div>
+
+        <div class="console">
+          <div class="console-steps">
+            <div class="code-unit step" data-copy-label="sign in command">
+              <div class="code-bar">
+                <span class="code-label"><span class="step-no">1.</span> Sign in and paste an agent key</span>
+              </div>
+              <pre tabindex="0"><code>npx -y @panphora/claycli login</code></pre>
+            </div>
+
+            <div class="code-unit step" data-copy-label="Claude Code MCP command">
+              <div class="code-bar">
+                <span class="code-label"><span class="step-no">2.</span> Add Clay CLI to Claude Code</span>
+              </div>
+              <pre tabindex="0"><code>claude mcp add clay -- npx -y @panphora/claycli mcp</code></pre>
+            </div>
+          </div>
+
+          <div class="console-json">
+            <div class="code-unit" data-copy-label="MCP JSON configuration">
+              <div class="code-bar">
+                <span class="code-label">Cursor (<code>.cursor/mcp.json</code>) and Claude Desktop (<code>claude_desktop_config.json</code>)</span>
+              </div>
+              <pre tabindex="0"><code>{
+  "mcpServers": {
+    "clay": {
+      "command": "npx",
+      "args": ["-y", "@panphora/claycli", "mcp"]
+    }
+  }
+}</code></pre>
+            </div>
+          </div>
+
+          <p class="setup-meta">Requires Node 20.18.1 or later. Pass <code>--read-only</code> after <code>mcp</code> to offer only the 10 reading tools. Check or end a session with <code>npx -y @panphora/claycli status</code> and <code>npx -y @panphora/claycli logout</code>.</p>
+        </div>
+
+        <details class="hosted-disclosure">
+          <summary><span class="disclosure-cue" aria-hidden="true"></span><span class="disclosure-text">Prefer no install: connect to the hosted MCP server at <code>hyperclay.com/mcp</code></span></summary>
+          <div class="hosted-body">
+            <p>Hyperclay also runs a hosted MCP server at <code>https://hyperclay.com/mcp</code> for Claude Code, Claude.ai, Claude Desktop, Cursor and ChatGPT. Every tool except <code>publish_site</code> works on both. <code>publish_site</code> needs Clay CLI because the hosted server cannot read files on your computer. Setup for each tool is at <a href="https://hyperclay.com/docs/agents/">hyperclay.com/docs/agents</a>.</p>
+            <div class="code-unit" data-copy-label="hosted MCP commands">
+              <div class="code-bar">
+                <span class="code-label">Hosted MCP setup for Claude Code</span>
+              </div>
+              <pre tabindex="0"><code>claude mcp add --transport http hyperclay https://hyperclay.com/mcp
+claude mcp login hyperclay</code></pre>
+            </div>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <section class="band" id="tools" aria-labelledby="tools-heading">
+      <div class="wrap">
+        <div class="section-intro">
+          <h2 id="tools-heading">What an agent can do</h2>
+          <div class="section-text">
+            <p>Your agent can inspect an HTML file in pieces, update exact text or structured data, restore an earlier save, or publish a local folder to its own address. Clay CLI provides 18 tools, and 10 of them only read.</p>
+            <p>Documents can be at most 8 MB. Large documents are read in pieces: an outline first, then the parts the agent selects, and small changes go through <code>edit_document</code>.</p>
+          </div>
+        </div>
+
+        <div class="tool-groups">
+          <div class="tool-col">
+            <div class="tool-group">
+              <div class="tool-group-head">
+                <h3>Read</h3>
+                <p class="tool-group-count"><span class="count-num">5</span> tools</p>
+              </div>
+              <dl class="tool-list">
+                <div class="tool-row">
+                  <dt><code>list_documents</code> <span class="tag-read">read only</span></dt>
+                  <dd>List the documents the key can reach.</dd>
+                </div>
+                <div class="tool-row">
+                  <dt><code>read_document</code> <span class="tag-read">read only</span></dt>
+                  <dd>Read the whole document when small, or an outline, or the parts the agent selects by CSS selector or character range.</dd>
+                </div>
+                <div class="tool-row">
+                  <dt><code>outline_document</code> <span class="tag-read">read only</span></dt>
+                  <dd>Read the element tree with selector paths and sizes.</dd>
+                </div>
+                <div class="tool-row">
+                  <dt><code>find_in_document</code> <span class="tag-read">read only</span></dt>
+                  <dd>Find where text or a regular expression appears, with the element around it.</dd>
+                </div>
+                <div class="tool-row">
+                  <dt><code>read_data</code> <span class="tag-read">read only</span></dt>
+                  <dd>Read the page's structured data.</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div class="tool-group">
+              <div class="tool-group-head">
+                <h3>Change</h3>
+                <p class="tool-group-count"><span class="count-num">4</span> tools</p>
+              </div>
+              <dl class="tool-list">
+                <div class="tool-row">
+                  <dt><code>edit_document</code></dt>
+                  <dd>Replace exact text in the version the agent read.</dd>
+                </div>
+                <div class="tool-row">
+                  <dt><code>save_document</code></dt>
+                  <dd>Save a whole document.</dd>
+                </div>
+                <div class="tool-row">
+                  <dt><code>create_document</code></dt>
+                  <dd>Create a new document at a path such as <code>notes/plan.html</code>. Missing folders are created. Refused if anything is already there.</dd>
+                </div>
+                <div class="tool-row">
+                  <dt><code>write_data</code></dt>
+                  <dd>Change the page's structured data.</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+
+          <div class="tool-col">
+            <div class="tool-group">
+              <div class="tool-group-head">
+                <h3>History</h3>
+                <p class="tool-group-count"><span class="count-num">3</span> tools</p>
+              </div>
+              <dl class="tool-list">
+                <div class="tool-row">
+                  <dt><code>list_versions</code> <span class="tag-read">read only</span></dt>
+                  <dd>List the saved versions of a document.</dd>
+                </div>
+                <div class="tool-row">
+                  <dt><code>read_version</code> <span class="tag-read">read only</span></dt>
+                  <dd>Read an earlier version from version history.</dd>
+                </div>
+                <div class="tool-row">
+                  <dt><code>restore_version</code></dt>
+                  <dd>Restore a document to an earlier version.</dd>
+                </div>
+              </dl>
+            </div>
+
+            <div class="tool-group">
+              <div class="tool-group-head">
+                <h3>Sites and addresses</h3>
+                <p class="tool-group-count"><span class="count-num">6</span> tools</p>
+              </div>
+              <dl class="tool-list">
+                <div class="tool-row">
+                  <dt><code>list_sites</code> <span class="tag-read">read only</span></dt>
+                  <dd>List site folders the key can reach, with each site's address, home page and page count.</dd>
+                </div>
+                <div class="tool-row">
+                  <dt><code>list_files</code> <span class="tag-read">read only</span></dt>
+                  <dd>List folders, documents and files under a folder.</dd>
+                </div>
+                <div class="tool-row">
+                  <dt><code>publish_site</code></dt>
+                  <dd>Upload a local folder as a site. Sends only what changed, never deletes files that exist only on hyperclay.com, and claims the subdomain last.</dd>
+                </div>
+                <div class="tool-row">
+                  <dt><code>claim_subdomain</code></dt>
+                  <dd>Give a document or a site folder its public address at <code>&lt;name&gt;.hyperclay.com</code>.</dd>
+                </div>
+                <div class="tool-row">
+                  <dt><code>add_domain</code></dt>
+                  <dd>Add a custom domain to a document or a site folder, and answer the two DNS records to set.</dd>
+                </div>
+                <div class="tool-row">
+                  <dt><code>domain_status</code> <span class="tag-read">read only</span></dt>
+                  <dd>Check each custom domain, whether it is active, and the DNS records it needs.</dd>
+                </div>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="safety" aria-labelledby="safety-heading">
+      <div class="wrap">
+        <div class="section-intro">
+          <h2 id="safety-heading">Keys and safety</h2>
+          <div class="section-text">
+            <p>You choose which files an agent can reach and what level of editing it gets. Even when an agent can edit, your existing pages are protected from conflicting writes, irreversible edits and leaked tokens.</p>
+          </div>
+        </div>
+
+        <div class="split-ledger">
+          <div class="split-col">
+            <h3>Agent keys</h3>
+            <ul class="fact-list">
+              <li>Make an agent key in the Hyperclay dashboard: open the account menu, then choose "Agent keys…".</li>
+              <li>Give the key a name, limit it to one team or one folder if you want, and pick one of three access levels: reading, changing content, or full editing.</li>
+              <li>The agent acts as you, with no more access than you have.</li>
+              <li>Revoke any key at any time. "Recent activity" in the Agent keys dialog shows what each key changed.</li>
+              <li>On your computer, the key is saved in <code>~/.config/claycli/credentials.json</code>, readable only by you. It is never accepted as an argument on the command line, so it stays out of shell history, and it is never printed. Set <code>CLAY_CLI_KEY</code> in the environment instead of a saved key if you prefer.</li>
+            </ul>
+          </div>
+
+          <div class="split-col">
+            <h3>What protects your files</h3>
+            <ul class="fact-list">
+              <li>Every write is based on the version the agent read. If the document or file changed in the meantime, the write is refused and the agent is told to read it again.</li>
+              <li>Every change to a document is kept in version history as "Recorded by you through &lt;key name&gt;", so any change can be restored.</li>
+              <li>When an agent replaces a file, the old bytes are kept as a backup.</li>
+              <li>Agents cannot delete, rename, move or share anything. They cannot make a private page public, cannot remove a custom domain, and cannot change a subdomain once it is set.</li>
+              <li>A save that contains an agent key or an OAuth token is refused.</li>
+              <li>Each key can make at most 60 page saves and 300 file writes a minute, so an agent stuck in a loop cannot fill the history.</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="cli" aria-labelledby="cli-heading">
+      <div class="wrap">
+        <div class="section-intro">
+          <h2 id="cli-heading">The command line, for scripts</h2>
+          <div class="section-text">
+            <p>Use the <code>claycli</code> command in shell scripts, build steps or terminal tasks when you want direct commands outside an MCP client.</p>
+          </div>
+        </div>
+
+        <div class="code-unit" data-copy-label="command line examples">
+          <div class="code-bar">
+            <span class="code-label">Example commands</span>
+          </div>
+          <pre tabindex="0"><code>claycli list
+claycli read hyperclay:123 --outline
+claycli read hyperclay:123 --select 'main > section'
+claycli edit hyperclay:123 --find 'Draft' --replace 'Final' --if-match &lt;etag&gt;
+claycli create notes/plan.html --file ./plan.html
+claycli versions hyperclay:123
+claycli subdomain hyperclay:123 my-tool
+npx -y @panphora/claycli publish ./maya demos/maya --subdomain maya --dry-run</code></pre>
+        </div>
+
+        <p class="cli-notes">A document is <code>hyperclay:&lt;id&gt;</code> or its <code>hyperclay.com</code> URL. Document commands take <code>--json</code>. Without a global install, each command also runs as <code>npx -y @panphora/claycli &lt;command&gt;</code>.</p>
+      </div>
+    </section>
+
+    <section class="band" id="runs" aria-labelledby="runs-heading">
+      <div class="wrap">
+        <div class="section-intro">
+          <h2 id="runs-heading">Where it runs, and the rename</h2>
+          <div class="section-text">
+            <p>Clay CLI connects to your hosted Hyperclay files today and keeps existing Clay Agent setups working without changes.</p>
+          </div>
+        </div>
+
+        <div class="split-ledger">
+          <div class="split-col">
+            <h3>Works with hyperclay.com</h3>
+            <p><a href="https://hyperclay.com/">Hyperclay</a> hosts HTML files that edit and save themselves. Its documents are plain HTML files you can open, edit and share.</p>
+            <p>Clay CLI works with <code>hyperclay.com</code> today. Support for the HTML Clay and Hyperclay Local desktop apps comes in a later version.</p>
+          </div>
+
+          <div class="split-col">
+            <h3>Renamed from Clay Agent</h3>
+            <p>Clay CLI was called Clay Agent (<code>@panphora/clay-agent</code>, command <code>clay-agent</code>). Nothing you set up breaks.</p>
+            <p>Running <code>npx -y @panphora/clay-agent</code> passes every command to Clay CLI and stays current, a saved key still signs you in, <code>CLAY_AGENT_KEY</code> still works, and an existing MCP entry needs no edit.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <div class="footer-own">
+        <span class="footer-name">Clay CLI</span>
+        <a href="https://hyperclay.com/docs/agents/">Docs</a>
+        <a href="https://www.npmjs.com/package/@panphora/claycli">npm</a>
+        <a href="https://github.com/hyperspacesystems/claycli">GitHub</a>
+        <a href="https://github.com/hyperspacesystems/claycli/blob/main/LICENSE">MIT license</a>
+        <a href="/llms.txt">llms.txt</a>
+      </div>
+      <div data-hyper-footer="claycli"></div>
+    </div>
+  </footer>
+
+  <script>
+    (() => {
+      const blocks = document.querySelectorAll("[data-copy-label]");
+      if (!blocks.length) return;
+
+      const live = document.createElement("div");
+      live.className = "visually-hidden";
+      live.setAttribute("aria-live", "polite");
+      document.body.append(live);
+
+      function writeClip(text) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          return navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+        }
+        return Promise.resolve(fallbackCopy(text));
+      }
+
+      function fallbackCopy(text) {
+        const ta = document.createElement("textarea");
+        ta.value = text;
+        ta.setAttribute("readonly", "");
+        ta.className = "visually-hidden";
+        document.body.append(ta);
+        ta.select();
+        try {
+          document.execCommand("copy");
+        } finally {
+          ta.remove();
+        }
+      }
+
+      blocks.forEach((block) => {
+        const bar = block.querySelector(".code-bar");
+        const code = block.querySelector("pre code");
+        if (!bar || !code) return;
+
+        const targetName = block.getAttribute("data-copy-label");
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "key copy-btn";
+
+        const visible = document.createElement("span");
+        visible.textContent = "Copy";
+
+        const hidden = document.createElement("span");
+        hidden.className = "visually-hidden";
+        hidden.textContent = " " + targetName;
+
+        btn.append(visible, hidden);
+
+        let resetTimer = null;
+        btn.addEventListener("click", () => {
+          writeClip(code.textContent || "").then(() => {
+            visible.textContent = "Copied";
+            btn.setAttribute("data-copied", "true");
+            live.textContent = "Copied " + targetName;
+            clearTimeout(resetTimer);
+            resetTimer = setTimeout(() => {
+              visible.textContent = "Copy";
+              btn.removeAttribute("data-copied");
+            }, 1600);
+          });
+        });
+
+        bar.append(btn);
+      });
+    })();
+  </script>
+  <script src="https://hyperclay.com/public/js/hyper-footer.js" defer></script>
+  <script src="https://hyperclay.com/public/js/polite-pop.js" defer></script>
+</body>
+</html>

@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.8.0] - 2026-11-27
+
+### Changed
+- Clay Agent is now Clay CLI. The package is `@panphora/claycli` and the command is `claycli`. The home page is [claycli.com](https://claycli.com).
+- New sign-ins are saved in `~/.config/claycli/credentials.json`.
+- The variables are `CLAY_CLI_KEY` and `CLAY_CLI_URL`.
+- An MCP client now sees the server as `claycli`.
+- Everything set up under the old name keeps working. `npx -y @panphora/clay-agent ...` passes every command to this package at the same version, a key saved by `clay-agent login` still signs you in (and `logout` removes it), and `CLAY_AGENT_KEY` and `CLAY_AGENT_URL` are read when the new variables are not set.
+
+### Fixed
+- A malformed key in the saved credentials file is no longer reported as a bad `CLAY_AGENT_KEY`.
+- When a credentials file cannot be read, the message names the file.
+
 ## [0.7.0] - 2026-11-20
 
 ### Added

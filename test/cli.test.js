@@ -13,7 +13,7 @@ import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { saveKey } from '../src/credentials.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const BIN = path.join(ROOT, 'bin', 'clay-agent.js');
+const BIN = path.join(ROOT, 'bin', 'claycli.js');
 const KEY = `hcak_${'d'.repeat(64)}`;
 const HTML = '<!doctype html><html><body><h1>Cat</h1></body></html>';
 
@@ -205,11 +205,11 @@ function runCli(args, { env, input = '' } = {}) {
 }
 
 async function tempHome() {
-  return fs.mkdtemp(path.join(os.tmpdir(), 'clay-agent-cli-test-'));
+  return fs.mkdtemp(path.join(os.tmpdir(), 'claycli-cli-test-'));
 }
 
 async function tempFolder(files) {
-  const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'clay-agent-publish-test-'));
+  const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'claycli-publish-test-'));
   for (const [name, contents] of Object.entries(files)) {
     const target = path.join(folder, name);
     await fs.mkdir(path.dirname(target), { recursive: true });
@@ -230,7 +230,7 @@ async function withServer(fn) {
 }
 
 function envFor(home, base, extra = {}) {
-  return { HOME: home, CLAY_AGENT_URL: base, CLAY_AGENT_KEY: KEY, ...extra };
+  return { HOME: home, CLAY_CLI_URL: base, CLAY_CLI_KEY: KEY, ...extra };
 }
 
 test('read prints the html and --json adds the etag', async () => {
@@ -277,7 +277,7 @@ test('save with a stale --if-match exits 2 and prints the current etag on stdout
 
 test('create makes a new page from the file it is given', async () => {
   await withServer(async ({ base, state, home }) => {
-    const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'clay-agent-create-test-'));
+    const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'claycli-create-test-'));
     const file = path.join(folder, 'plan.html');
     await fs.writeFile(file, HTML);
     try {
@@ -312,7 +312,7 @@ test('edit with --if-match changes the document', async () => {
 
 test('read without a key exits 4', async () => {
   await withServer(async ({ base, home }) => {
-    const result = await runCli(['read', 'hyperclay:1'], { env: envFor(home, base, { CLAY_AGENT_KEY: '' }) });
+    const result = await runCli(['read', 'hyperclay:1'], { env: envFor(home, base, { CLAY_CLI_KEY: '' }) });
 
     assert.equal(result.code, 4);
     assert.match(result.stderr, /Not signed in/);
@@ -370,10 +370,10 @@ test('mcp starts without a key and answers each call with the login hint', async
       command: process.execPath,
       args: [BIN, 'mcp'],
       cwd: ROOT,
-      env: { HOME: home, CLAY_AGENT_URL: base },
+      env: { HOME: home, CLAY_CLI_URL: base },
       stderr: 'pipe',
     });
-    const client = new Client({ name: 'clay-agent-cli-test', version: '1.0.0' });
+    const client = new Client({ name: 'claycli-cli-test', version: '1.0.0' });
 
     try {
       await client.connect(transport);
@@ -434,7 +434,7 @@ test('subdomain without a name exits 1 with the usage line', async () => {
     const result = await runCli(['subdomain', 'hyperclay:123'], { env: envFor(home, base) });
 
     assert.equal(result.code, 1);
-    assert.match(result.stderr, /Usage: clay-agent subdomain \(<document> \| --site <site>\) <name> \[--account <name>\]/);
+    assert.match(result.stderr, /Usage: claycli subdomain \(<document> \| --site <site>\) <name> \[--account <name>\]/);
     assert.equal(state.requests.length, 0);
   });
 });
@@ -479,7 +479,7 @@ test('domain frob prints the domain usage and exits 1', async () => {
     const result = await runCli(['domain', 'frob'], { env: envFor(home, base) });
 
     assert.equal(result.code, 1);
-    assert.match(result.stderr, /Usage: clay-agent domain \(add \(<document> \| --site <site>\) <domain> \[--also-www\] \| status \(<document> \| --site <site>\)\)/);
+    assert.match(result.stderr, /Usage: claycli domain \(add \(<document> \| --site <site>\) <domain> \[--also-www\] \| status \(<document> \| --site <site>\)\)/);
     assert.equal(state.requests.length, 0);
   });
 });
@@ -528,10 +528,10 @@ test('the mcp server reads the key on each call, so a later login works without 
       command: process.execPath,
       args: [BIN, 'mcp'],
       cwd: ROOT,
-      env: { HOME: home, CLAY_AGENT_URL: base },
+      env: { HOME: home, CLAY_CLI_URL: base },
       stderr: 'pipe',
     });
-    const client = new Client({ name: 'clay-agent-cli-test', version: '1.0.0' });
+    const client = new Client({ name: 'claycli-cli-test', version: '1.0.0' });
 
     try {
       await client.connect(transport);
@@ -560,13 +560,13 @@ test('mcp refuses --host, positionals and unknown hosts with a usage message', a
 
     const hinted = await runCli(['mcp', '--host', 'local'], { env });
     assert.equal(hinted.code, 1);
-    assert.match(hinted.stderr, /Usage: clay-agent mcp/);
+    assert.match(hinted.stderr, /Usage: claycli mcp/);
     assert.match(hinted.stderr, /Use --hosts/);
 
     for (const args of [['mcp', 'read-only'], ['mcp', '--hosts', 'foo'], ['mcp', '--hosts', '']]) {
       const result = await runCli(args, { env });
       assert.equal(result.code, 1, args.join(' '));
-      assert.match(result.stderr, /Usage: clay-agent mcp/, args.join(' '));
+      assert.match(result.stderr, /Usage: claycli mcp/, args.join(' '));
     }
   });
 });

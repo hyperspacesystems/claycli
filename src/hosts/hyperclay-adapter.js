@@ -59,7 +59,7 @@ export function hyperclayAdapter(client) {
     const offered = await client.features();
     if (!offered.includes(name)) {
       throw new ClayError('not-supported', 'hyperclay.com does not offer this yet.', {
-        hint: 'This hyperclay.com server is older than this clay-agent. Use the dashboard for this for now.',
+        hint: 'This hyperclay.com server is older than this version of claycli. Use the dashboard for this for now.',
       });
     }
   }

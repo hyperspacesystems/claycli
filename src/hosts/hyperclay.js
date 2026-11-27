@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { ClayError, asClayError, redact } from '../errors.js';
 
 const KEY_HINT =
-  'Make an agent key in the dashboard (Account, then Agent keys), then run: npx -y @panphora/clay-agent login';
+  'Make an agent key in the dashboard (Account, then Agent keys), then run: npx -y @panphora/claycli login';
 
 export const HINTS = {
   conflict: 'The document changed after you read it. Read it again and redo the change.',
@@ -17,7 +17,7 @@ export const HINTS = {
   'subdomain-already-set': 'Change a subdomain in the dashboard.',
   'subdomain-limit-reached': 'Your subdomain limit grows each month.',
   'not-a-site-folder': 'A site folder holds its own site.json file. Add one to the folder, then try again.',
-  'not-supported': 'This hyperclay.com server is older than this clay-agent. Use the dashboard for this for now.',
+  'not-supported': 'This hyperclay.com server is older than this version of claycli. Use the dashboard for this for now.',
   'wildcard-not-allowed': 'Add a wildcard domain in the dashboard.',
   'domain-already-added': 'This domain is on another of your documents or sites. Remove it there in the dashboard first.',
   'domain-in-use': 'Another account uses this domain, or a name that overlaps it.',

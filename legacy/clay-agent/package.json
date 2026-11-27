@@ -1,0 +1,37 @@
+{
+  "name": "@panphora/clay-agent",
+  "version": "0.0.0",
+  "description": "Renamed to @panphora/claycli. This package passes every command through to it.",
+  "type": "module",
+  "bin": {
+    "clay-agent": "bin/clay-agent.js"
+  },
+  "exports": {
+    ".": "./src/index.js",
+    "./hosted": "./src/hosted.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.18.1"
+  },
+  "author": "David Miranda",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hyperspacesystems/claycli.git",
+    "directory": "legacy/clay-agent"
+  },
+  "homepage": "https://claycli.com",
+  "dependencies": {
+    "@panphora/claycli": "0.0.0"
+  }
+}

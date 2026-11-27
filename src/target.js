@@ -21,7 +21,7 @@ function ambiguousTarget(document, hostOverride) {
     htmlclay: 'HTML Clay serves files inside your home folder.',
     local: 'Hyperclay Local serves files inside the folders it has open.',
   };
-  return new ClayError('ambiguous-target', `clay-agent cannot send ${document} to ${hostOverride}.`, {
+  return new ClayError('ambiguous-target', `claycli cannot send ${document} to ${hostOverride}.`, {
     hint: hints[hostOverride],
   });
 }
@@ -204,7 +204,7 @@ export async function resolveTarget(
 
   if (!DOCUMENT_EXTENSIONS.has(path.extname(file).toLowerCase())) {
     throw new ClayError('not-a-document', `That is not an HTML document: ${file}.`, {
-      hint: 'clay-agent works on .html, .htm and .htmlclay files.',
+      hint: 'claycli works on .html, .htm and .htmlclay files.',
     });
   }
 

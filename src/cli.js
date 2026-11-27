@@ -11,41 +11,41 @@ import { buildActions } from './runtime.js';
 const require = createRequire(import.meta.url);
 const VERSION = require('../package.json').version;
 
-const USAGE = `clay-agent lets AI agents read and edit your hyperclay.com documents.
+const USAGE = `claycli lets AI agents read and edit your hyperclay.com documents.
 
 Usage:
-  clay-agent login [--hyperclay-url <url>]
-  clay-agent logout [--hyperclay-url <url>]
-  clay-agent status [--hyperclay-url <url>] [--json]
-  clay-agent mcp [--read-only] [--hosts <a,b>]
-  clay-agent list [where] [--cursor <id>]
-  clay-agent read <document> [--select <css>] [--range <start:length>] [--max-chars <n>]
-  clay-agent read <document> --outline [--depth <n>]
-  clay-agent read <document> (--find <text> | --regex <pattern>) [--limit <n>]
-  clay-agent data <document>
-  clay-agent data <document> --write <json|-> --if-match <etag>
-  clay-agent edit <document> (--find <text> --replace <text> [--occurrence <n>] | --edits <file.json>) --if-match <etag>
-  clay-agent save <document> --file <path|-> --if-match <etag>
-  clay-agent create <path> --file <path|-> [--account <name>]
-  clay-agent versions <document> [--before <id>]
-  clay-agent version <document> <version-id> [--select <css>] [--range <start:length>]
-  clay-agent restore <document> <version-id> --if-match <etag>
-  clay-agent subdomain (<document> | --site <site>) <name> [--account <name>]
-  clay-agent sites [--account <name>] [--cursor <id>]
-  clay-agent files <path> [--account <name>] [--cursor <id>]
-  clay-agent domain add (<document> | --site <site>) <domain> [--also-www]
-  clay-agent domain status (<document> | --site <site>)
-  clay-agent publish <folder> <account folder> [--subdomain <name>] [--account <name>] [--dry-run]
+  claycli login [--hyperclay-url <url>]
+  claycli logout [--hyperclay-url <url>]
+  claycli status [--hyperclay-url <url>] [--json]
+  claycli mcp [--read-only] [--hosts <a,b>]
+  claycli list [where] [--cursor <id>]
+  claycli read <document> [--select <css>] [--range <start:length>] [--max-chars <n>]
+  claycli read <document> --outline [--depth <n>]
+  claycli read <document> (--find <text> | --regex <pattern>) [--limit <n>]
+  claycli data <document>
+  claycli data <document> --write <json|-> --if-match <etag>
+  claycli edit <document> (--find <text> --replace <text> [--occurrence <n>] | --edits <file.json>) --if-match <etag>
+  claycli save <document> --file <path|-> --if-match <etag>
+  claycli create <path> --file <path|-> [--account <name>]
+  claycli versions <document> [--before <id>]
+  claycli version <document> <version-id> [--select <css>] [--range <start:length>]
+  claycli restore <document> <version-id> --if-match <etag>
+  claycli subdomain (<document> | --site <site>) <name> [--account <name>]
+  claycli sites [--account <name>] [--cursor <id>]
+  claycli files <path> [--account <name>] [--cursor <id>]
+  claycli domain add (<document> | --site <site>) <domain> [--also-www]
+  claycli domain status (<document> | --site <site>)
+  claycli publish <folder> <account folder> [--subdomain <name>] [--account <name>] [--dry-run]
 
 Document commands take --json, --host <host> and --hyperclay-url <url>.
-Your agent key is only read from stdin or the CLAY_AGENT_KEY environment variable.
+Your agent key is only read from stdin or the CLAY_CLI_KEY environment variable.
 `;
 
 const NOT_SIGNED_IN =
-  'Not signed in. Make an agent key in the dashboard (Account, then Agent keys), then run: npx -y @panphora/clay-agent login';
+  'Not signed in. Make an agent key in the dashboard (Account, then Agent keys), then run: npx -y @panphora/claycli login';
 
 const KEY_COMMAND_LINE =
-  'Do not put the key on the command line: it would be saved in your shell history. Run `clay-agent login` and paste it.';
+  'Do not put the key on the command line: it would be saved in your shell history. Run `claycli login` and paste it.';
 
 const KEY_IN_ARGV = /hcak_[0-9a-f]{64}/i;
 
@@ -179,21 +179,21 @@ async function status(argv, { stdout, env }) {
 }
 
 const COMMAND_USAGE = {
-  list: 'Usage: clay-agent list [where] [--cursor <id>]',
-  read: 'Usage: clay-agent read <document> [--select <css>] [--range <start:length>] [--max-chars <n>] [--outline [--depth <n>]] [--find <text> | --regex <pattern> [--limit <n>]]',
-  data: 'Usage: clay-agent data <document> [--write <json|-> --if-match <etag>]',
-  edit: 'Usage: clay-agent edit <document> (--find <text> --replace <text> [--occurrence <n>] | --edits <file.json>) --if-match <etag>',
-  save: 'Usage: clay-agent save <document> --file <path|-> --if-match <etag>',
-  create: 'Usage: clay-agent create <path> --file <path|-> [--account <name>]',
-  versions: 'Usage: clay-agent versions <document> [--before <id>]',
-  version: 'Usage: clay-agent version <document> <version-id> [--select <css>] [--range <start:length>]',
-  restore: 'Usage: clay-agent restore <document> <version-id> --if-match <etag>',
-  subdomain: 'Usage: clay-agent subdomain (<document> | --site <site>) <name> [--account <name>]',
-  sites: 'Usage: clay-agent sites [--account <name>] [--cursor <id>]',
-  files: 'Usage: clay-agent files <path> [--account <name>] [--cursor <id>]',
-  domain: 'Usage: clay-agent domain (add (<document> | --site <site>) <domain> [--also-www] | status (<document> | --site <site>))',
-  publish: 'Usage: clay-agent publish <folder> <account folder> [--subdomain <name>] [--account <name>] [--dry-run]',
-  mcp: 'Usage: clay-agent mcp [--read-only] [--hosts <a,b>]',
+  list: 'Usage: claycli list [where] [--cursor <id>]',
+  read: 'Usage: claycli read <document> [--select <css>] [--range <start:length>] [--max-chars <n>] [--outline [--depth <n>]] [--find <text> | --regex <pattern> [--limit <n>]]',
+  data: 'Usage: claycli data <document> [--write <json|-> --if-match <etag>]',
+  edit: 'Usage: claycli edit <document> (--find <text> --replace <text> [--occurrence <n>] | --edits <file.json>) --if-match <etag>',
+  save: 'Usage: claycli save <document> --file <path|-> --if-match <etag>',
+  create: 'Usage: claycli create <path> --file <path|-> [--account <name>]',
+  versions: 'Usage: claycli versions <document> [--before <id>]',
+  version: 'Usage: claycli version <document> <version-id> [--select <css>] [--range <start:length>]',
+  restore: 'Usage: claycli restore <document> <version-id> --if-match <etag>',
+  subdomain: 'Usage: claycli subdomain (<document> | --site <site>) <name> [--account <name>]',
+  sites: 'Usage: claycli sites [--account <name>] [--cursor <id>]',
+  files: 'Usage: claycli files <path> [--account <name>] [--cursor <id>]',
+  domain: 'Usage: claycli domain (add (<document> | --site <site>) <domain> [--also-www] | status (<document> | --site <site>))',
+  publish: 'Usage: claycli publish <folder> <account folder> [--subdomain <name>] [--account <name>] [--dry-run]',
+  mcp: 'Usage: claycli mcp [--read-only] [--hosts <a,b>]',
 };
 
 const FLAG_NAMES = {

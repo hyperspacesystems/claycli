@@ -1,4 +1,4 @@
-# @panphora/clay-agent
+# @panphora/claycli
 
 Let AI agents read and edit [Hyperclay](https://hyperclay.com) HTML files and publish sites, from the command line or as an MCP server for Claude Code, Claude Desktop and Cursor.
 
@@ -13,14 +13,14 @@ With full editing, a key can also create and replace files and folders (pages, i
 ## Sign in
 
 ```bash
-npx -y @panphora/clay-agent login
+npx -y @panphora/claycli login
 ```
 
-Paste the key when asked. It is saved in `~/.config/clay-agent/credentials.json`, readable only by you. The key is never accepted as a command-line argument (it would end up in your shell history), and it is never printed. `CLAY_AGENT_KEY` works instead of a saved key.
+Paste the key when asked. It is saved in `~/.config/claycli/credentials.json`, readable only by you. The key is never accepted as a command-line argument (it would end up in your shell history), and it is never printed. `CLAY_CLI_KEY` works instead of a saved key.
 
 ```bash
-npx -y @panphora/clay-agent status
-npx -y @panphora/clay-agent logout
+npx -y @panphora/claycli status
+npx -y @panphora/claycli logout
 ```
 
 ## Use it as an MCP server
@@ -28,7 +28,7 @@ npx -y @panphora/clay-agent logout
 Claude Code:
 
 ```bash
-claude mcp add clay -- npx -y @panphora/clay-agent mcp
+claude mcp add clay -- npx -y @panphora/claycli mcp
 ```
 
 Claude Desktop and Cursor (`claude_desktop_config.json` or `.cursor/mcp.json`):
@@ -36,7 +36,7 @@ Claude Desktop and Cursor (`claude_desktop_config.json` or `.cursor/mcp.json`):
 ```json
 {
   "mcpServers": {
-    "clay": { "command": "npx", "args": ["-y", "@panphora/clay-agent", "mcp"] }
+    "clay": { "command": "npx", "args": ["-y", "@panphora/claycli", "mcp"] }
   }
 }
 ```
@@ -66,30 +66,30 @@ Options: `mcp --read-only` offers only the reading tools.
 | `domain_status` | Each custom domain on a document or a site folder, whether it is active, and the DNS records it needs |
 | `publish_site` | Upload a local folder as a site. Sends only what changed, never deletes files that exist only on hyperclay.com (lists them as `remoteOnly`), and claims the subdomain last |
 
-Large documents (up to 5 MB) are read in pieces: an outline first, then the parts the agent needs, and small changes go through `edit_document`.
+Large documents (up to 8 MB) are read in pieces: an outline first, then the parts the agent needs, and small changes go through `edit_document`.
 
 ## Use it from the command line
 
 ```bash
-clay-agent list
-clay-agent read hyperclay:123 --outline
-clay-agent read hyperclay:123 --select 'main > section'
-clay-agent edit hyperclay:123 --find 'Draft' --replace 'Final' --if-match <etag>
-clay-agent create notes/plan.html --file ./plan.html
-clay-agent versions hyperclay:123
-clay-agent subdomain hyperclay:123 my-tool
-clay-agent subdomain (<document> | --site <site>) <name> [--account <name>]
-clay-agent sites [--account <name>] [--cursor <id>]
-clay-agent files <path> [--account <name>] [--cursor <id>]
-clay-agent domain add (<document> | --site <site>) <domain> [--also-www]
-clay-agent domain status (<document> | --site <site>)
-clay-agent publish <folder> <account folder> [--subdomain <name>] [--account <name>] [--dry-run]
+claycli list
+claycli read hyperclay:123 --outline
+claycli read hyperclay:123 --select 'main > section'
+claycli edit hyperclay:123 --find 'Draft' --replace 'Final' --if-match <etag>
+claycli create notes/plan.html --file ./plan.html
+claycli versions hyperclay:123
+claycli subdomain hyperclay:123 my-tool
+claycli subdomain (<document> | --site <site>) <name> [--account <name>]
+claycli sites [--account <name>] [--cursor <id>]
+claycli files <path> [--account <name>] [--cursor <id>]
+claycli domain add (<document> | --site <site>) <domain> [--also-www]
+claycli domain status (<document> | --site <site>)
+claycli publish <folder> <account folder> [--subdomain <name>] [--account <name>] [--dry-run]
 ```
 
 Preview a site publish before sending anything, then run it again without `--dry-run`:
 
 ```bash
-npx -y @panphora/clay-agent publish ./maya demos/maya --subdomain maya --dry-run
+npx -y @panphora/claycli publish ./maya demos/maya --subdomain maya --dry-run
 ```
 
 A document is `hyperclay:<id>` or its hyperclay.com URL. A site folder (a folder holding its own `site.json`) is its path in your account such as `demos/maya`, its address, or `hyperclay:<folder id>`. Content changes need `--if-match` with the etag from a read. `publish` sends only what changed, never deletes files that exist only on hyperclay.com, and claims the subdomain last. Add `--json` to any command for machine-readable output.
@@ -97,6 +97,15 @@ A document is `hyperclay:<id>` or its hyperclay.com URL. A site folder (a folder
 Exit codes: `0` done, `1` refused or failed, `2` the document changed since it was read (the current etag is printed), `3` the host is not reachable, `4` not signed in, or the key is malformed, revoked or expired, `5` the host may or may not have saved the write (read the document before trying again).
 
 Needs Node 20.18.1 or later.
+
+## Renamed from Clay Agent
+
+This package was `@panphora/clay-agent` through 0.7.0, with the command `clay-agent`. Nothing you set up under that name needs to change:
+
+- `npx -y @panphora/clay-agent ...` keeps working. The old package passes every command to this one and is published again with each release, so it stays current.
+- A key saved by `clay-agent login` still signs you in. New sign-ins are saved in `~/.config/claycli/`, and `logout` removes the key from both places.
+- `CLAY_AGENT_KEY` and `CLAY_AGENT_URL` still work. `CLAY_CLI_KEY` and `CLAY_CLI_URL` win when both are set.
+- An MCP entry named `clay` needs no edit.
 
 ## License
 

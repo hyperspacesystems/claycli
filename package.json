@@ -1,10 +1,10 @@
 {
-  "name": "@panphora/clay-agent",
-  "version": "0.7.0",
+  "name": "@panphora/claycli",
+  "version": "0.8.0",
   "description": "Let AI agents read and edit HTML files on hyperclay.com from the command line or as an MCP server",
   "type": "module",
   "bin": {
-    "clay-agent": "bin/clay-agent.js"
+    "claycli": "bin/claycli.js"
   },
   "exports": {
     ".": "./src/cli.js",
@@ -18,7 +18,8 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "deploy": "node scripts/publish-old-name.mjs && wrangler deploy && git rev-parse HEAD > .deploy"
   },
   "engines": {
     "node": ">=20.18.1"
@@ -38,16 +39,16 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/panphora/clay-agent.git"
+    "url": "git+https://github.com/hyperspacesystems/claycli.git"
   },
-  "homepage": "https://github.com/panphora/clay-agent",
+  "homepage": "https://claycli.com",
   "bugs": {
-    "url": "https://github.com/panphora/clay-agent/issues"
+    "url": "https://github.com/hyperspacesystems/claycli/issues"
   },
   "hyper": {
     "kind": "cli",
     "status": "active",
-    "url": "https://github.com/panphora/clay-agent"
+    "url": "https://claycli.com"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.2",

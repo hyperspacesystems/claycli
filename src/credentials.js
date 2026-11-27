@@ -8,6 +8,11 @@ export const DEFAULT_BASE = 'https://hyperclay.com';
 
 const KEY_PATTERN = /^hcak_[0-9a-f]{64}$/;
 
+// The tool was named clay-agent through 0.7.0. Keys saved and variables set under that name keep working.
+const FOLDER = 'claycli';
+const OLD_FOLDER = 'clay-agent';
+const ENV_PREFIXES = ['CLAY_CLI_', 'CLAY_AGENT_'];
+
 export function isAgentKey(key) {
   return KEY_PATTERN.test(String(key ?? ''));
 }
@@ -16,16 +21,32 @@ export function homeDir(env = process.env) {
   return env.HOME || env.USERPROFILE || os.homedir();
 }
 
-export function configDir(env = process.env) {
+function configRoot(env) {
   if (process.platform === 'win32') {
-    return path.join(env.APPDATA || path.join(homeDir(env), 'AppData', 'Roaming'), 'clay-agent');
+    return env.APPDATA || path.join(homeDir(env), 'AppData', 'Roaming');
   }
-  const root = env.XDG_CONFIG_HOME || path.join(homeDir(env), '.config');
-  return path.join(root, 'clay-agent');
+  return env.XDG_CONFIG_HOME || path.join(homeDir(env), '.config');
+}
+
+export function configDir(env = process.env) {
+  return path.join(configRoot(env), FOLDER);
 }
 
 export function credentialsPath(env = process.env) {
   return path.join(configDir(env), 'credentials.json');
+}
+
+function credentialsPaths(env) {
+  return [credentialsPath(env), path.join(configRoot(env), OLD_FOLDER, 'credentials.json')];
+}
+
+function fromEnv(env, suffix) {
+  for (const prefix of ENV_PREFIXES) {
+    const name = prefix + suffix;
+    const value = String(env[name] ?? '').trim();
+    if (value) return { name, value };
+  }
+  return null;
 }
 
 function httpsOnly() {
@@ -40,7 +61,7 @@ function isLoopbackHost(hostname) {
 }
 
 export function baseUrl({ flag, env = process.env } = {}) {
-  const base = flag || env.CLAY_AGENT_URL || DEFAULT_BASE;
+  const base = flag || fromEnv(env, 'URL')?.value || DEFAULT_BASE;
   let url;
   try {
     url = new URL(String(base));
@@ -52,42 +73,43 @@ export function baseUrl({ flag, env = process.env } = {}) {
   return String(base).replace(/\/+$/, '');
 }
 
+function unreadable(file) {
+  return new ClayError('key-missing', `claycli could not read ${file}.`, {
+    hint: 'Fix or delete that file, then run `claycli login` again.',
+  });
+}
+
 async function readStore(file) {
   let text;
   try {
     text = await fs.readFile(file, 'utf8');
   } catch (error) {
     if (error?.code === 'ENOENT') return null;
-    throw new ClayError('key-missing', 'clay-agent could not read its credentials file.', {
-      hint: 'Run `clay-agent login` again.',
-    });
+    throw unreadable(file);
   }
   let data;
   try {
     data = JSON.parse(text);
   } catch {
-    throw new ClayError('key-missing', 'clay-agent could not read its credentials file.', {
-      hint: 'Run `clay-agent login` again.',
-    });
+    throw unreadable(file);
   }
-  if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    throw new ClayError('key-missing', 'clay-agent could not read its credentials file.', {
-      hint: 'Run `clay-agent login` again.',
-    });
-  }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw unreadable(file);
   return data;
 }
 
-async function writeStore(file, data, dir) {
+async function writeStore(file, data) {
+  const dir = path.dirname(file);
+  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+  await fs.chmod(dir, 0o700);
   const temp = path.join(dir, `.credentials-${process.pid}-${Date.now()}.json`);
   await fs.writeFile(temp, `${JSON.stringify(data, null, 2)}\n`, { mode: 0o600 });
   await fs.chmod(temp, 0o600);
   await fs.rename(temp, file);
 }
 
-function checkedKey(key) {
+function checkedKey(key, source) {
   if (!isAgentKey(key)) {
-    throw new ClayError('invalid-key', 'CLAY_AGENT_KEY is not a valid agent key.', {
+    throw new ClayError('invalid-key', `${source} is not a valid agent key.`, {
       hint: 'Copy the key again from the dashboard; it is hcak_ followed by 64 lowercase letters and digits on one line.',
     });
   }
@@ -95,43 +117,41 @@ function checkedKey(key) {
 }
 
 export async function readKey(base, env = process.env) {
-  if (base === baseUrl({ env }) && env.CLAY_AGENT_KEY) {
-    const key = env.CLAY_AGENT_KEY.trim();
-    if (key) return checkedKey(key);
+  if (base === baseUrl({ env })) {
+    const variable = fromEnv(env, 'KEY');
+    if (variable) return checkedKey(variable.value, variable.name);
   }
-  const file = credentialsPath(env);
-  const data = await readStore(file);
-  if (!data) return null;
-  const key = data.hosts?.[base]?.key;
-  if (typeof key !== 'string' || !key) return null;
-  return checkedKey(key.trim());
+  for (const file of credentialsPaths(env)) {
+    const key = (await readStore(file))?.hosts?.[base]?.key;
+    if (typeof key === 'string' && key) return checkedKey(key.trim(), 'The saved key');
+  }
+  return null;
 }
 
 export async function saveKey(base, key, env = process.env) {
   if (!isAgentKey(key)) {
     throw new ClayError('invalid-key', 'That is not an agent key. Copy it from the dashboard: it starts with hcak_.');
   }
-  const dir = configDir(env);
-  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
-  await fs.chmod(dir, 0o700);
   const file = credentialsPath(env);
   const existing = await readStore(file);
-  const data = {
-    v: 1,
-    hosts: { ...(existing?.hosts || {}) },
-  };
-  data.hosts[base] = { key };
-  await writeStore(file, data, dir);
+  await writeStore(file, { v: 1, hosts: { ...(existing?.hosts || {}), [base]: { key } } });
 }
 
+// Sign-out clears the key from every file it can read before it reports one it could not.
 export async function removeKey(base, env = process.env) {
-  const file = credentialsPath(env);
-  const existing = await readStore(file);
-  if (!existing?.hosts || !(base in existing.hosts)) return false;
-  delete existing.hosts[base];
-  const dir = configDir(env);
-  await fs.mkdir(dir, { recursive: true, mode: 0o700 });
-  await fs.chmod(dir, 0o700);
-  await writeStore(file, { v: 1, hosts: existing.hosts }, dir);
-  return true;
+  let removed = false;
+  let failure = null;
+  for (const file of credentialsPaths(env)) {
+    try {
+      const existing = await readStore(file);
+      if (!existing?.hosts || !(base in existing.hosts)) continue;
+      delete existing.hosts[base];
+      await writeStore(file, { v: 1, hosts: existing.hosts });
+      removed = true;
+    } catch (error) {
+      failure ??= error;
+    }
+  }
+  if (failure) throw failure;
+  return removed;
 }

@@ -151,7 +151,7 @@ async function connect({ actions, readOnly = false } = {}) {
   const server = createMcpServer({ actions, readOnly });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
-  const client = new Client({ name: 'clay-agent-test', version: '1.0.0' });
+  const client = new Client({ name: 'claycli-test', version: '1.0.0' });
   await client.connect(clientTransport);
   return {
     client,
@@ -209,6 +209,16 @@ test('the server lists eighteen tools with their annotations', async () => {
       assert.equal(typeof tool.title, 'string', tool.name);
       assert.ok(tool.description.length > 0, tool.name);
     }
+  } finally {
+    await session.close();
+  }
+});
+
+test('the server tells clients its name is claycli', async () => {
+  const { actions } = actionsFor();
+  const session = await connect({ actions });
+  try {
+    assert.equal(session.client.getServerVersion().name, 'claycli');
   } finally {
     await session.close();
   }

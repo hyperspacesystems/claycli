@@ -86,5 +86,5 @@ export function asClayError(error) {
       retryable: true,
     });
   }
-  return new ClayError('internal', 'Something went wrong inside clay-agent.');
+  return new ClayError('internal', 'Something went wrong inside claycli.');
 }

@@ -10,14 +10,14 @@ const require = createRequire(import.meta.url);
 const VERSION = require('../package.json').version;
 
 export function createMcpServer({ actions, readOnly = false, version = VERSION }) {
-  const server = new McpServer({ name: 'clay-agent', version }, { instructions: INSTRUCTIONS });
+  const server = new McpServer({ name: 'claycli', version }, { instructions: INSTRUCTIONS });
   registerTools(server, { actions, tools: TOOLS.filter((tool) => !readOnly || tool.read) });
   return server;
 }
 
 const MCP_HOSTS = ['hyperclay', 'htmlclay', 'local'];
 
-const MCP_USAGE = 'Usage: clay-agent mcp [--read-only] [--hosts <a,b>] [--hyperclay-url <url>]';
+const MCP_USAGE = 'Usage: claycli mcp [--read-only] [--hosts <a,b>] [--hyperclay-url <url>]';
 
 function usageFailure(hint = null) {
   return new ClayError('invalid-argument', MCP_USAGE, { hint, details: { usage: MCP_USAGE } });

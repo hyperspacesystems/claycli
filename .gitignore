@@ -1,2 +1,4 @@
 node_modules/
 test-box-out/
+.deploy
+.wrangler/

@@ -1,0 +1,121 @@
+# Clay CLI
+
+> Clay CLI (`@panphora/claycli`, command `claycli`) lets an AI agent read and edit plain HTML files hosted on hyperclay.com. It runs locally as an MCP server for Claude Code, Cursor and Claude Desktop, and as a command for scripts.
+
+## Setup (MCP and sign in)
+
+Requires Node 20.18.1 or later.
+
+Sign in and paste an agent key when asked:
+
+```bash
+npx -y @panphora/claycli login
+```
+
+Add the MCP server to Claude Code:
+
+```bash
+claude mcp add clay -- npx -y @panphora/claycli mcp
+```
+
+Cursor (`.cursor/mcp.json`) and Claude Desktop (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "clay": { "command": "npx", "args": ["-y", "@panphora/claycli", "mcp"] }
+  }
+}
+```
+
+Options and session commands:
+
+* Pass `mcp --read-only` to offer only the 10 reading tools.
+* Check sign in state: `npx -y @panphora/claycli status`
+* Sign out: `npx -y @panphora/claycli logout`
+
+## Hosted MCP option (no install)
+
+Hyperclay runs a hosted MCP server at `https://hyperclay.com/mcp` for Claude Code, Claude.ai, Claude Desktop, Cursor and ChatGPT. Setup for each client is at https://hyperclay.com/docs/agents/.
+
+```bash
+claude mcp add --transport http hyperclay https://hyperclay.com/mcp
+claude mcp login hyperclay
+```
+
+Every tool except `publish_site` works on both. `publish_site` requires Clay CLI because the hosted server cannot read local files on your computer.
+
+## The 18 MCP tools
+
+Documents can be at most 8 MB. Large documents are read in pieces: an outline first, then selected parts, with focused edits applied through `edit_document`.
+
+### Read (5 tools, all included in `--read-only`)
+
+* `list_documents` (read only): Documents the key can reach.
+* `read_document` (read only): Whole document when small, or an outline, or parts selected by CSS selector or character range.
+* `outline_document` (read only): Element tree with selector paths and sizes.
+* `find_in_document` (read only): Text or regular expression matches with the surrounding element.
+* `read_data` (read only): The page's structured data.
+
+### Change (4 tools)
+
+* `edit_document`: Replace exact text in the version read.
+* `save_document`: Save a whole document.
+* `create_document`: Create a new document at a path such as `notes/plan.html`. Missing folders are created. Refused if anything is already there.
+* `write_data`: Change the page's structured data.
+
+### History (3 tools; `list_versions` and `read_version` are included in `--read-only`)
+
+* `list_versions` (read only): Version history of a document.
+* `read_version` (read only): Content of a saved version.
+* `restore_version`: Restore an earlier version.
+
+### Sites and addresses (6 tools; `list_sites`, `list_files` and `domain_status` are included in `--read-only`)
+
+* `list_sites` (read only): Site folders the key can reach, with each site's address, home page and page count.
+* `list_files` (read only): Folders, documents and files under a folder.
+* `publish_site`: Upload a local folder as a site. Sends only what changed, never deletes files that exist only on hyperclay.com, and claims the subdomain last.
+* `claim_subdomain`: Give a document or a site folder its public address at `<name>.hyperclay.com`.
+* `add_domain`: Add a custom domain to a document or a site folder, and return the two DNS records to set.
+* `domain_status` (read only): Each custom domain, whether it is active, and the DNS records it needs.
+
+## Agent keys and safety
+
+* Create an agent key in the Hyperclay dashboard: account menu, then "Agent keys…".
+* A key has a name, can be limited to one team or one folder, and has one of three access levels: reading, changing content, or full editing.
+* Revoke a key at any time. "Recent activity" in the Agent keys dialog shows what each key changed.
+* The agent acts as the owner, with no more access than the owner has.
+* Saved locally in `~/.config/claycli/credentials.json` (readable only by the owner), never accepted on the command line, and never printed. Set `CLAY_CLI_KEY` in the environment as an alternative.
+* Every write is checked against the version read; concurrent edits cause the write to be refused until the agent reads again.
+* Document edits are saved in version history as "Recorded by you through <key name>". Replaced files keep old bytes as a backup.
+* Agents cannot delete, rename, move or share anything, cannot make a private page public, cannot remove a custom domain, and cannot change a subdomain once set.
+* Saves containing an agent key or OAuth token are refused.
+* Rate limit per key: at most 60 page saves and 300 file writes per minute.
+
+## Command line usage
+
+A document is `hyperclay:<id>` or its `hyperclay.com` URL. Document commands accept `--json`. Without a global install, run `npx -y @panphora/claycli <command>`.
+
+```bash
+claycli list
+claycli read hyperclay:123 --outline
+claycli read hyperclay:123 --select 'main > section'
+claycli edit hyperclay:123 --find 'Draft' --replace 'Final' --if-match <etag>
+claycli create notes/plan.html --file ./plan.html
+claycli versions hyperclay:123
+claycli subdomain hyperclay:123 my-tool
+npx -y @panphora/claycli publish ./maya demos/maya --subdomain maya --dry-run
+```
+
+## Compatibility and rename
+
+* Works with hyperclay.com. Support for HTML Clay and Hyperclay Local desktop apps comes in a later version.
+* Previously named Clay Agent (`@panphora/clay-agent`, command `clay-agent`). `npx -y @panphora/clay-agent` forwards every command to Clay CLI and stays current, saved keys and `CLAY_AGENT_KEY` continue to work, and existing MCP configs need no changes.
+
+## Links
+
+* Home: https://claycli.com/
+* Agent docs: https://hyperclay.com/docs/agents/
+* npm package: https://www.npmjs.com/package/@panphora/claycli
+* Hyperclay: https://hyperclay.com/
+* License: MIT
