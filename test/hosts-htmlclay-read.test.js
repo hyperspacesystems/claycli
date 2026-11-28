@@ -222,7 +222,7 @@ test('a refusal keeps its code and gets the lane hint', async () => {
     await assert.rejects(client(server, TOKEN).read(htmlClayDocumentId('/home/me/index.html')), (error) => {
       assert.equal(error.code, 'not-reachable');
       assert.equal(error.status, 404);
-      assert.equal(error.hint, 'Open the document in HTML Clay, or serve or trust its folder, then try again.');
+      assert.equal(error.hint, 'Open the file in HTML Clay, or serve or trust its folder, then try again.');
       return true;
     });
   });

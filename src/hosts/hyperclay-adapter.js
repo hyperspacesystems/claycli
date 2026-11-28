@@ -22,7 +22,7 @@ export function hyperclayAdapter(client) {
         const listed = await client.list({ url: target.url });
         const match = (listed?.documents ?? []).find((doc) => sameUrl(doc.url, target.url));
         if (!match) {
-          throw new ClayError('not-found', 'No document at that URL that this key can reach.');
+          throw new ClayError('not-found', 'No HTML file at that URL that this key can reach.');
         }
         found = { id: match.id, ref: `hyperclay:${match.id}` };
         byUrl.set(target.url, found);
@@ -36,7 +36,7 @@ export function hyperclayAdapter(client) {
     const query = { cursor };
     if (where !== undefined && where !== null && where !== '') {
       if (String(where).includes('hcak_')) {
-        throw new ClayError('invalid-argument', 'Do not put an agent key in a document search.');
+        throw new ClayError('invalid-argument', 'Do not put an agent key in a file search.');
       }
       if (PLAIN_USERNAME.test(where)) query.account = where;
       else query.url = where;

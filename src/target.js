@@ -11,7 +11,7 @@ const HYPERCLAY_REFERENCE = /^hyperclay:(\d+)$/;
 const URL_PATTERN = /^https?:\/\//i;
 
 const DOCUMENT_FORMS =
-  'Give a document as a hyperclay:<id> reference or a hyperclay.com URL, a local URL like http://127.0.0.1:4321/notes.html, or a file path.';
+  'Give an HTML file as a hyperclay:<id> reference or a hyperclay.com URL, a local URL like http://127.0.0.1:4321/notes.html, or a file path.';
 
 const OPEN_AN_APP = 'Open HTML Clay, or put the file in a folder Hyperclay Local serves.';
 
@@ -164,7 +164,7 @@ export async function resolveTarget(
   { cwd = process.cwd(), env = process.env, platform = process.platform, discovered, hostOverride = null } = {},
 ) {
   if (typeof document !== 'string' || document.trim() === '') {
-    throw new ClayError('not-found', 'No document was given.', { hint: DOCUMENT_FORMS });
+    throw new ClayError('not-found', 'No HTML file was given.', { hint: DOCUMENT_FORMS });
   }
 
   const reference = document.trim();
@@ -203,7 +203,7 @@ export async function resolveTarget(
   }
 
   if (!DOCUMENT_EXTENSIONS.has(path.extname(file).toLowerCase())) {
-    throw new ClayError('not-a-document', `That is not an HTML document: ${file}.`, {
+    throw new ClayError('not-a-document', `That is not an HTML file: ${file}.`, {
       hint: 'claycli works on .html, .htm and .htmlclay files.',
     });
   }

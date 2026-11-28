@@ -16,7 +16,7 @@ const HOSTED_REGEX_WORKERS = 4;
 
 // Only hyperclay:<id> and https:// addresses; never a file path or a loopback app.
 export async function hostedResolve(document, { host } = {}) {
-  if (host && host !== 'hyperclay') throw new ClayError('host-not-allowed', 'This server reaches hyperclay.com documents only.');
+  if (host && host !== 'hyperclay') throw new ClayError('host-not-allowed', 'This server reaches hyperclay.com HTML files only.');
   const reference = String(document ?? '').trim();
   const byId = REFERENCE.exec(reference);
   if (byId) return { host: 'hyperclay', id: byId[1], ref: `hyperclay:${byId[1]}` };
@@ -27,8 +27,8 @@ export async function hostedResolve(document, { host } = {}) {
     url = null;
   }
   if (url && url.protocol === 'https:') return { host: 'hyperclay', url: reference };
-  throw new ClayError('not-found', 'Give a document as hyperclay:<id> or its https:// address.', {
-    hint: 'list_documents shows the id of every document you can reach.',
+  throw new ClayError('not-found', 'Give an HTML file as hyperclay:<id> or its https:// address.', {
+    hint: 'list_documents shows the id of every HTML file you can reach.',
   });
 }
 

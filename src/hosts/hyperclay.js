@@ -6,9 +6,9 @@ const KEY_HINT =
   'Make an agent key in the dashboard (Account, then Agent keys), then run: npx -y @panphora/claycli login';
 
 export const HINTS = {
-  conflict: 'The document changed after you read it. Read it again and redo the change.',
-  'precondition-required': 'Read the document first, then send its etag.',
-  'read-first': 'Read the document first, then send its etag.',
+  conflict: 'The file changed after you read it. Read it again and redo the change.',
+  'precondition-required': 'Read the file first, then send its etag.',
+  'read-first': 'Read the file first, then send its etag.',
   unauthorized: KEY_HINT,
   'key-revoked': KEY_HINT,
   'key-expired': KEY_HINT,
@@ -19,15 +19,15 @@ export const HINTS = {
   'not-a-site-folder': 'A site folder holds its own site.json file. Add one to the folder, then try again.',
   'not-supported': 'This hyperclay.com server is older than this version of claycli. Use the dashboard for this for now.',
   'wildcard-not-allowed': 'Add a wildcard domain in the dashboard.',
-  'domain-already-added': 'This domain is on another of your documents or sites. Remove it there in the dashboard first.',
+  'domain-already-added': 'This domain is on another of your HTML files or sites. Remove it there in the dashboard first.',
   'domain-in-use': 'Another account uses this domain, or a name that overlaps it.',
   'already-exists': 'Something is already at that path. List the folder and replace it with its etag.',
   'secret-in-content': 'Remove the agent key from the file, then try again.',
-  managed: 'This place belongs to a collection or to one document. Write somewhere else.',
+  managed: 'This place belongs to a collection or to one HTML file. Write somewhere else.',
   'path-conflict': 'A file and a folder cannot share one name. Rename one of them.',
   'recovery-unavailable': 'Nothing was written. Send the same change again in a moment.',
   'operation-reused': 'Send each new change with a new operation id.',
-  'save-already-applied': 'This change was already saved. Read the document again to see what it holds.',
+  'save-already-applied': 'This change was already saved. Read the file again to see what it holds.',
 };
 
 export function hyperclayClient({
@@ -53,7 +53,7 @@ export function hyperclayClient({
 
   function lostOutcome() {
     return new ClayError('outcome-unknown', 'The change may or may not have been saved.', {
-      hint: 'Read the document again before trying anything else.',
+      hint: 'Read the file again before trying anything else.',
     });
   }
 

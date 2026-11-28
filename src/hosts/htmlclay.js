@@ -7,7 +7,7 @@ import { HINTS, hyperclayClient } from './hyperclay.js';
 
 const LANE_HINTS = {
   ...HINTS,
-  'not-reachable': 'Open the document in HTML Clay, or serve or trust its folder, then try again.',
+  'not-reachable': 'Open the file in HTML Clay, or serve or trust its folder, then try again.',
   'read-required': 'This change removes items you have not read. Read the data again, then send the change.',
   unauthorized: "HTML Clay's agent token changed. Restart this program so it reads the new token.",
 };
@@ -110,7 +110,7 @@ export function htmlClayAdapter(client) {
       const listed = await client.list();
       const match = (listed?.documents ?? []).find((doc) => sameUrl(doc.url, target.ref));
       if (!match) {
-        throw new ClayError('not-found', 'HTML Clay has no open document at that address.', {
+        throw new ClayError('not-found', 'HTML Clay has no open file at that address.', {
           hint: LANE_HINTS['not-reachable'],
         });
       }

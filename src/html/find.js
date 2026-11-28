@@ -91,7 +91,7 @@ async function regexRanges(html, source, max, workerLimit = Infinity) {
       const timer = setTimeout(() => {
         worker.terminate();
         reject(
-          new ClayError('find-timeout', 'That regular expression took too long on this document.', {
+          new ClayError('find-timeout', 'That regular expression took too long on this file.', {
             hint: 'Use a simpler pattern, or pass `text` for a literal search.',
           }),
         );

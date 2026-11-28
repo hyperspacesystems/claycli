@@ -108,7 +108,7 @@ claude mcp login hyperclay</code></pre>
           <h2 id="tools-heading">What an agent can do</h2>
           <div class="section-text">
             <p>Your agent can inspect an HTML file in pieces, update exact text or structured data, restore an earlier save, or publish a local folder to its own address. Clay CLI provides 18 tools, and 10 of them only read.</p>
-            <p>Documents can be at most 8 MB. Large documents are read in pieces: an outline first, then the parts the agent selects, and small changes go through <code>edit_document</code>.</p>
+            <p>HTML files can be at most 8 MB. Large files are read in pieces: an outline first, then the parts the agent selects, and small changes go through <code>edit_document</code>.</p>
           </div>
         </div>
 
@@ -122,11 +122,11 @@ claude mcp login hyperclay</code></pre>
               <dl class="tool-list">
                 <div class="tool-row">
                   <dt><code>list_documents</code> <span class="tag-read">read only</span></dt>
-                  <dd>List the documents the key can reach.</dd>
+                  <dd>List the HTML files the key can reach.</dd>
                 </div>
                 <div class="tool-row">
                   <dt><code>read_document</code> <span class="tag-read">read only</span></dt>
-                  <dd>Read the whole document when small, or an outline, or the parts the agent selects by CSS selector or character range.</dd>
+                  <dd>Read the whole HTML file when small, or an outline, or the parts the agent selects by CSS selector or character range.</dd>
                 </div>
                 <div class="tool-row">
                   <dt><code>outline_document</code> <span class="tag-read">read only</span></dt>
@@ -155,11 +155,11 @@ claude mcp login hyperclay</code></pre>
                 </div>
                 <div class="tool-row">
                   <dt><code>save_document</code></dt>
-                  <dd>Save a whole document.</dd>
+                  <dd>Save a whole HTML file.</dd>
                 </div>
                 <div class="tool-row">
                   <dt><code>create_document</code></dt>
-                  <dd>Create a new document at a path such as <code>notes/plan.html</code>. Missing folders are created. Refused if anything is already there.</dd>
+                  <dd>Create a new HTML file at a path such as <code>notes/plan.html</code>. Missing folders are created. Refused if anything is already there.</dd>
                 </div>
                 <div class="tool-row">
                   <dt><code>write_data</code></dt>
@@ -178,7 +178,7 @@ claude mcp login hyperclay</code></pre>
               <dl class="tool-list">
                 <div class="tool-row">
                   <dt><code>list_versions</code> <span class="tag-read">read only</span></dt>
-                  <dd>List the saved versions of a document.</dd>
+                  <dd>List the saved versions of an HTML file.</dd>
                 </div>
                 <div class="tool-row">
                   <dt><code>read_version</code> <span class="tag-read">read only</span></dt>
@@ -186,7 +186,7 @@ claude mcp login hyperclay</code></pre>
                 </div>
                 <div class="tool-row">
                   <dt><code>restore_version</code></dt>
-                  <dd>Restore a document to an earlier version.</dd>
+                  <dd>Restore an HTML file to an earlier version.</dd>
                 </div>
               </dl>
             </div>
@@ -203,7 +203,7 @@ claude mcp login hyperclay</code></pre>
                 </div>
                 <div class="tool-row">
                   <dt><code>list_files</code> <span class="tag-read">read only</span></dt>
-                  <dd>List folders, documents and files under a folder.</dd>
+                  <dd>List folders, HTML files and other files under a folder.</dd>
                 </div>
                 <div class="tool-row">
                   <dt><code>publish_site</code></dt>
@@ -211,11 +211,11 @@ claude mcp login hyperclay</code></pre>
                 </div>
                 <div class="tool-row">
                   <dt><code>claim_subdomain</code></dt>
-                  <dd>Give a document or a site folder its public address at <code>&lt;name&gt;.hyperclay.com</code>.</dd>
+                  <dd>Give an HTML file or a site folder its public address at <code>&lt;name&gt;.hyperclay.com</code>.</dd>
                 </div>
                 <div class="tool-row">
                   <dt><code>add_domain</code></dt>
-                  <dd>Add a custom domain to a document or a site folder, and answer the two DNS records to set.</dd>
+                  <dd>Add a custom domain to an HTML file or a site folder, and answer the two DNS records to set.</dd>
                 </div>
                 <div class="tool-row">
                   <dt><code>domain_status</code> <span class="tag-read">read only</span></dt>
@@ -252,8 +252,8 @@ claude mcp login hyperclay</code></pre>
           <div class="split-col">
             <h3>What protects your files</h3>
             <ul class="fact-list">
-              <li>Every write is based on the version the agent read. If the document or file changed in the meantime, the write is refused and the agent is told to read it again.</li>
-              <li>Every change to a document is kept in version history as "Recorded by you through &lt;key name&gt;", so any change can be restored.</li>
+              <li>Every write is based on the version the agent read. If the file changed in the meantime, the write is refused and the agent is told to read it again.</li>
+              <li>Every change to an HTML file is kept in version history as "Recorded by you through &lt;key name&gt;", so any change can be restored.</li>
               <li>When an agent replaces a file, the old bytes are kept as a backup.</li>
               <li>Agents cannot delete, rename, move or share anything. They cannot make a private page public, cannot remove a custom domain, and cannot change a subdomain once it is set.</li>
               <li>A save that contains an agent key or an OAuth token is refused.</li>
@@ -287,7 +287,7 @@ claycli subdomain hyperclay:123 my-tool
 npx -y @panphora/claycli publish ./maya demos/maya --subdomain maya --dry-run</code></pre>
         </div>
 
-        <p class="cli-notes">A document is <code>hyperclay:&lt;id&gt;</code> or its <code>hyperclay.com</code> URL. Document commands take <code>--json</code>. Without a global install, each command also runs as <code>npx -y @panphora/claycli &lt;command&gt;</code>.</p>
+        <p class="cli-notes">An HTML file is <code>hyperclay:&lt;id&gt;</code> or its <code>hyperclay.com</code> URL. File commands take <code>--json</code>. Without a global install, each command also runs as <code>npx -y @panphora/claycli &lt;command&gt;</code>.</p>
       </div>
     </section>
 
@@ -303,7 +303,7 @@ npx -y @panphora/claycli publish ./maya demos/maya --subdomain maya --dry-run</c
         <div class="split-ledger">
           <div class="split-col">
             <h3>Works with hyperclay.com</h3>
-            <p><a href="https://hyperclay.com/">Hyperclay</a> hosts HTML files that edit and save themselves. Its documents are plain HTML files you can open, edit and share.</p>
+            <p><a href="https://hyperclay.com/">Hyperclay</a> hosts HTML files that edit and save themselves. Every page is plain HTML you can open, edit and share.</p>
             <p>Clay CLI works with <code>hyperclay.com</code> today. Support for the HTML Clay and Hyperclay Local desktop apps comes in a later version.</p>
           </div>
 

@@ -433,7 +433,7 @@ test('a 412 conflict becomes a ClayError with the etag, changedBy and the confli
       assert.equal(error.status, 412);
       assert.equal(error.etag, 'E2');
       assert.deepEqual(error.details.changedBy, { name: 'Ann' });
-      assert.equal(error.hint, 'The document changed after you read it. Read it again and redo the change.');
+      assert.equal(error.hint, 'The file changed after you read it. Read it again and redo the change.');
       return true;
     });
   });

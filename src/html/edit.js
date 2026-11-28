@@ -51,7 +51,7 @@ export function applyEdits(html, edits, { scanLimit = false } = {}) {
     const offsets = locate(html, edit.find, limit);
     if (offsets.length === 0) {
       throw new ClayError('edit-not-found', `Edit ${index + 1} did not match any text.`, {
-        hint: 'Read the document again and copy the text exactly, including whitespace.',
+        hint: 'Read the file again and copy the text exactly, including whitespace.',
         details: { index },
       });
     }
@@ -77,7 +77,7 @@ export function applyEdits(html, edits, { scanLimit = false } = {}) {
           'edit-not-found',
           `Edit ${index + 1} asked for occurrence ${edit.occurrence}, but the text occurs ${offsets.length} times.`,
           {
-            hint: 'Read the document again and count the occurrences, or drop `occurrence` when the text is unique.',
+            hint: 'Read the file again and count the occurrences, or drop `occurrence` when the text is unique.',
             details: { index },
           },
         );

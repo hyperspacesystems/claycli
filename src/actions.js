@@ -19,7 +19,7 @@ const CUT_HINT =
   'The answer was cut to stay within maxChars. Read the rest with range, starting at the end offset shown.';
 
 const WHOLE_READ_FIRST_HINT =
-  'Read the whole document with read_document first; save_document replaces all of it.';
+  'Read the whole file with read_document first; save_document replaces all of it.';
 
 // undoOf passes on the version a write replaced, when the host names one, so an
 // agent can restore it to undo its own change.
@@ -30,11 +30,11 @@ function undoOf(result) {
 function readFirstHint(explicitEtag) {
   return explicitEtag
     ? 'Pass --if-match with the etag from a read.'
-    : 'Read the document first (read_document, outline_document, find_in_document or read_data), then write.';
+    : 'Read the file first (read_document, outline_document, find_in_document or read_data), then write.';
 }
 
 function refuseParse(size) {
-  throw new ClayError('too-large-to-parse', `This document is ${size} characters, too large to search or outline here.`, {
+  throw new ClayError('too-large-to-parse', `This file is ${size} characters, too large to search or outline here.`, {
     hint: 'Read it in parts with range (start and length), and change it with edit_document, which finds exact text without parsing.',
   });
 }
@@ -164,7 +164,7 @@ export function createActions({ adapters, resolve, session = createSession(), re
 
   function refuseSecret(html) {
     if (typeof html === 'string' && KEY_PATTERN.test(html)) {
-      throw new ClayError('secret-in-content', 'The document would contain an agent key. Remove it before saving.');
+      throw new ClayError('secret-in-content', 'The file would contain an agent key. Remove it before saving.');
     }
   }
 
@@ -266,7 +266,7 @@ export function createActions({ adapters, resolve, session = createSession(), re
       if (base === null) {
         const loaded = await load(input);
         if (loaded.etag !== etag) {
-          throw new ClayError('conflict', 'The document changed after you read it.', {
+          throw new ClayError('conflict', 'The file changed after you read it.', {
             etag: loaded.etag,
             hint: 'Read it again and redo the edit.',
           });
@@ -376,7 +376,7 @@ export function createActions({ adapters, resolve, session = createSession(), re
       refuseReadOnly();
       const filePath = String(input.path ?? '').trim();
       if (!/\.(html|htmlclay)$/.test(filePath)) {
-        throw new ClayError('invalid-argument', 'A new document needs a path ending in .html, such as notes/plan.html.');
+        throw new ClayError('invalid-argument', 'A new HTML file needs a path ending in .html, such as notes/plan.html.');
       }
       const { host, adapter } = hyperclayAdapterFor(input, 'putFile');
       const written = await adapter.putFile(filePath, Buffer.from(String(input.html ?? ''), 'utf8'), { create: true, account: input.account });

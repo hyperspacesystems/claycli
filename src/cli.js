@@ -11,7 +11,7 @@ import { buildActions } from './runtime.js';
 const require = createRequire(import.meta.url);
 const VERSION = require('../package.json').version;
 
-const USAGE = `claycli lets AI agents read and edit your hyperclay.com documents.
+const USAGE = `claycli lets AI agents read and edit your hyperclay.com HTML files.
 
 Usage:
   claycli login [--hyperclay-url <url>]
@@ -37,7 +37,7 @@ Usage:
   claycli domain status (<document> | --site <site>)
   claycli publish <folder> <account folder> [--subdomain <name>] [--account <name>] [--dry-run]
 
-Document commands take --json, --host <host> and --hyperclay-url <url>.
+Commands that take a <document> also take --json, --host <host> and --hyperclay-url <url>.
 Your agent key is only read from stdin or the CLAY_CLI_KEY environment variable.
 `;
 

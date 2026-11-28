@@ -82,7 +82,7 @@ export function asClayError(error) {
   if (error instanceof ClayError) return error;
   if (isNetworkError(error)) {
     return new ClayError('host-unavailable', 'Could not reach the host.', {
-      hint: 'Check your internet connection, or open the desktop app if this is a local document, then try again.',
+      hint: 'Check your internet connection, or open the desktop app if this is a local file, then try again.',
       retryable: true,
     });
   }

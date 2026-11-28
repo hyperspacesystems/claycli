@@ -47,12 +47,12 @@ Every tool except `publish_site` works on both. `publish_site` requires Clay CLI
 
 ## The 18 MCP tools
 
-Documents can be at most 8 MB. Large documents are read in pieces: an outline first, then selected parts, with focused edits applied through `edit_document`.
+HTML files can be at most 8 MB. Large files are read in pieces: an outline first, then selected parts, with focused edits applied through `edit_document`.
 
 ### Read (5 tools, all included in `--read-only`)
 
-* `list_documents` (read only): Documents the key can reach.
-* `read_document` (read only): Whole document when small, or an outline, or parts selected by CSS selector or character range.
+* `list_documents` (read only): HTML files the key can reach.
+* `read_document` (read only): Whole HTML file when small, or an outline, or parts selected by CSS selector or character range.
 * `outline_document` (read only): Element tree with selector paths and sizes.
 * `find_in_document` (read only): Text or regular expression matches with the surrounding element.
 * `read_data` (read only): The page's structured data.
@@ -60,23 +60,23 @@ Documents can be at most 8 MB. Large documents are read in pieces: an outline fi
 ### Change (4 tools)
 
 * `edit_document`: Replace exact text in the version read.
-* `save_document`: Save a whole document.
-* `create_document`: Create a new document at a path such as `notes/plan.html`. Missing folders are created. Refused if anything is already there.
+* `save_document`: Save a whole HTML file.
+* `create_document`: Create a new HTML file at a path such as `notes/plan.html`. Missing folders are created. Refused if anything is already there.
 * `write_data`: Change the page's structured data.
 
 ### History (3 tools; `list_versions` and `read_version` are included in `--read-only`)
 
-* `list_versions` (read only): Version history of a document.
+* `list_versions` (read only): Version history of an HTML file.
 * `read_version` (read only): Content of a saved version.
 * `restore_version`: Restore an earlier version.
 
 ### Sites and addresses (6 tools; `list_sites`, `list_files` and `domain_status` are included in `--read-only`)
 
 * `list_sites` (read only): Site folders the key can reach, with each site's address, home page and page count.
-* `list_files` (read only): Folders, documents and files under a folder.
+* `list_files` (read only): Folders, HTML files and other files under a folder.
 * `publish_site`: Upload a local folder as a site. Sends only what changed, never deletes files that exist only on hyperclay.com, and claims the subdomain last.
-* `claim_subdomain`: Give a document or a site folder its public address at `<name>.hyperclay.com`.
-* `add_domain`: Add a custom domain to a document or a site folder, and return the two DNS records to set.
+* `claim_subdomain`: Give an HTML file or a site folder its public address at `<name>.hyperclay.com`.
+* `add_domain`: Add a custom domain to an HTML file or a site folder, and return the two DNS records to set.
 * `domain_status` (read only): Each custom domain, whether it is active, and the DNS records it needs.
 
 ## Agent keys and safety
@@ -87,14 +87,14 @@ Documents can be at most 8 MB. Large documents are read in pieces: an outline fi
 * The agent acts as the owner, with no more access than the owner has.
 * Saved locally in `~/.config/claycli/credentials.json` (readable only by the owner), never accepted on the command line, and never printed. Set `CLAY_CLI_KEY` in the environment as an alternative.
 * Every write is checked against the version read; concurrent edits cause the write to be refused until the agent reads again.
-* Document edits are saved in version history as "Recorded by you through <key name>". Replaced files keep old bytes as a backup.
+* HTML file edits are saved in version history as "Recorded by you through <key name>". Replaced files keep old bytes as a backup.
 * Agents cannot delete, rename, move or share anything, cannot make a private page public, cannot remove a custom domain, and cannot change a subdomain once set.
 * Saves containing an agent key or OAuth token are refused.
 * Rate limit per key: at most 60 page saves and 300 file writes per minute.
 
 ## Command line usage
 
-A document is `hyperclay:<id>` or its `hyperclay.com` URL. Document commands accept `--json`. Without a global install, run `npx -y @panphora/claycli <command>`.
+An HTML file is `hyperclay:<id>` or its `hyperclay.com` URL. File commands accept `--json`. Without a global install, run `npx -y @panphora/claycli <command>`.
 
 ```bash
 claycli list

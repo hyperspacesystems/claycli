@@ -599,7 +599,7 @@ test('a read_data etag never authorizes a write over a change the agent did not 
     actions.save_document({ document: 'hyperclay:1', html: '<html><body><p>TWO</p></body></html>' }),
     (error) => {
       assert.equal(error.code, 'read-first');
-      assert.match(error.hint, /whole document/);
+      assert.match(error.hint, /whole file/);
       return true;
     },
   );
